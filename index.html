@@ -164,7 +164,8 @@ label.chk input{width:auto}
     <select id="retryEngine" style="width:auto">
      <option value="">Otomatik sıra</option>
      <option value="gemini">Gemini</option>
-     <option value="grok">Grok</option>
+     <option value="grok">Grok (xAI)</option>
+     <option value="groq">Groq (Llama)</option>
      <option value="tesseract">Tesseract (çevrimdışı)</option>
     </select>
     <button id="btnRetry">↻ Bu bölgeyi tekrar dene</button>
@@ -186,8 +187,13 @@ label.chk input{width:auto}
  <div class="f"><span>Gemini model adı (görüntü destekleyen bir model olmalı)</span><input type="text" id="sGeminiModel"></div>
  <div class="f"><span>Grok (xAI) API anahtarları (her satıra bir tane)</span><textarea id="sGrokKeys" rows="3" placeholder="xai-…"></textarea></div>
  <div class="f"><span>Grok model adı (görüntü destekleyen bir model olmalı)</span><input type="text" id="sGrokModel"></div>
+ <div class="f"><span>Groq API anahtarları (Llama modelleri; gsk_ ile başlar, her satıra bir tane)</span><textarea id="sGroqKeys" rows="3" placeholder="gsk_…"></textarea></div>
+ <div class="f"><span>Groq model adı (görüntü destekleyen Llama modeli olmalı)</span><input type="text" id="sGroqModel"></div>
  <div class="f"><span>Motor öncelik sırası</span>
   <select id="sOrder">
+   <option value="gemini,grok,groq,tesseract">Gemini → Grok → Groq → Tesseract (çevrimdışı)</option>
+   <option value="gemini,groq,grok,tesseract">Gemini → Groq → Grok → Tesseract (çevrimdışı)</option>
+   <option value="groq,gemini,grok,tesseract">Groq → Gemini → Grok → Tesseract (çevrimdışı)</option>
    <option value="gemini,grok,tesseract">Gemini → Grok → Tesseract (çevrimdışı)</option>
    <option value="grok,gemini,tesseract">Grok → Gemini → Tesseract (çevrimdışı)</option>
    <option value="tesseract,gemini,grok">Önce Tesseract (çevrimdışı), olmazsa API</option>
@@ -215,13 +221,20 @@ const PDFJS_WORKER_CDN='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/p
 const TESS_CDN='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
 
 /* ---------- Ayarlar ---------- */
-const DEF={geminiKeys:'',grokKeys:'',geminiModel:'gemini-2.5-flash',grokModel:'grok-4',order:'gemini,grok,tesseract',tessLang:'tur+eng',tessLocal:'',preferEmbedded:true,autoCopy:true,night:false,dark:false,append:false,
+const DEF={geminiKeys:'',grokKeys:'',groqKeys:'',geminiModel:'gemini-2.5-flash',grokModel:'grok-4',groqModel:'meta-llama/llama-4-scout-17b-16e-instruct',order:'gemini,grok,groq,tesseract',tessLang:'tur+eng',tessLocal:'',preferEmbedded:true,autoCopy:true,night:false,dark:false,append:false,
 prompt:'Bu görseldeki metni olduğu gibi, satır yapısını ve yazım düzenini koruyarak yaz. Yorum, açıklama veya başlık ekleme; yalnızca görseldeki metni ver. Tablo varsa satırları koru, hücreleri sekme ile ayır. Görselde metin yoksa boş yanıt ver.'};
 let S=Object.assign({},DEF);
 try{Object.assign(S,JSON.parse(localStorage.getItem(LS)||'{}'))}catch(e){}
 const save=()=>{try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}};
-const keysOf=p=>(p==='gemini'?S.geminiKeys:S.grokKeys).split(/[\n,]+/).map(s=>s.trim()).filter(Boolean);
-const LABEL={gemini:'Gemini',grok:'Grok',tesseract:'Tesseract (çevrimdışı)'};
+const split=t=>(t||'').split(/[\n,]+/).map(s=>s.trim()).filter(Boolean);
+// gsk_ ile başlayan anahtarlar Groq'a aittir; Grok kutusuna yanlışlıkla girilse bile Groq'a yönlendirilir
+const keysOf=p=>{
+  if(p==='gemini')return split(S.geminiKeys);
+  const g=split(S.grokKeys);
+  if(p==='grok')return g.filter(k=>!k.startsWith('gsk_'));
+  return [...new Set([...split(S.groqKeys),...g.filter(k=>k.startsWith('gsk_'))])];
+};
+const LABEL={gemini:'Gemini',grok:'Grok (xAI)',groq:'Groq (Llama)',tesseract:'Tesseract (çevrimdışı)'};
 
 function toast(m,ms=2200){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('show'),ms)}
 async function copyText(t){
@@ -470,7 +483,15 @@ async function embeddedText(tab,i,rect){
 /* ---------- OCR motorları ---------- */
 const ks={};
 const KS=(p,k)=>ks[p+'|'+k]||(ks[p+'|'+k]={st:'ok',until:0});
-const cursor={gemini:0,grok:0};
+const cursor={gemini:0,grok:0,groq:0};
+let curCanvas=null;
+function smallB64(){
+  // Groq istek başına görsel boyutunu sınırlar (~4MB base64); gerekirse küçült
+  const c=curCanvas,m=Math.max(c.width,c.height),k=Math.min(1,2000/m);
+  const o=document.createElement('canvas');o.width=Math.max(1,Math.round(c.width*k));o.height=Math.max(1,Math.round(c.height*k));
+  o.getContext('2d').drawImage(c,0,0,o.width,o.height);
+  return o.toDataURL('image/jpeg',0.85).split(',')[1];
+}
 function apiErr(status,msg,raw){const e=new Error(msg||('HTTP '+status));e.status=status;e.raw=raw||'';return e}
 function classify(e){
   const s=e.status||0,t=(e.message||'')+' '+(e.raw||'');
@@ -500,6 +521,14 @@ async function callGrok(key,b64,mime){
   if(!r.ok)throw apiErr(r.status,(j.error&&(j.error.message||j.error))||j.message||raw.slice(0,200),raw.slice(0,900));
   return(j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content)||'';
 }
+async function callGroq(key,b64,mime){
+  const r=await fetch('https://api.groq.com/openai/v1/chat/completions',{
+    method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+    body:JSON.stringify({model:S.groqModel,temperature:0,messages:[{role:'user',content:[{type:'text',text:S.prompt},{type:'image_url',image_url:{url:'data:'+mime+';base64,'+b64}}]}]})});
+  const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch(e){}
+  if(!r.ok)throw apiErr(r.status,(j.error&&(j.error.message||j.error))||raw.slice(0,200),raw.slice(0,900));
+  return(j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content)||'';
+}
 async function tryProvider(name,b64,mime,notes){
   const keys=keysOf(name);
   if(!keys.length){notes.push(LABEL[name]+': anahtar yok');return null}
@@ -511,7 +540,7 @@ async function tryProvider(name,b64,mime,notes){
     anyTried=true;
     try{
       setOcrStatus(LABEL[name]+' (anahtar #'+(idx+1)+') çalışıyor…',true);
-      const t=name==='gemini'?await callGemini(key,b64,mime):await callGrok(key,b64,mime);
+      const t=name==='gemini'?await callGemini(key,b64,mime):name==='grok'?await callGrok(key,b64,mime):await callGroq(key,smallB64(),mime);
       st.st='ok';st.until=0;cursor[name]=idx;return t;
     }catch(e){
       const c=classify(e);
@@ -542,7 +571,9 @@ async function tessOcr(canvas){
   return r.data.text||'';
 }
 async function runOcr(canvas,force){
-  const order=force?[force]:S.order.split(',');
+  curCanvas=canvas;
+  let order=force?[force]:S.order.split(',');
+  if(!force&&!order.includes('groq')&&keysOf('groq').length){const t=order.indexOf('tesseract');if(t<0)order.push('groq');else order.splice(t,0,'groq')}
   const mime='image/jpeg',b64=canvas.toDataURL(mime,0.92).split(',')[1];
   const notes=[];
   for(const eng of order){
@@ -629,7 +660,7 @@ async function doSearch(){
 /* ---------- Ayarlar penceresi ---------- */
 function renderKeyStatus(){
   const box=$('#keyStatus');box.innerHTML='';
-  ['gemini','grok'].forEach(p=>{
+  ['gemini','grok','groq'].forEach(p=>{
     const ks_=keysOf(p);
     if(!ks_.length){box.insertAdjacentHTML('beforeend','<div class="keyrow"><span>'+LABEL[p]+'</span><span class="hint">anahtar yok</span></div>');return}
     ks_.forEach((k,i)=>{
@@ -644,14 +675,14 @@ function renderKeyStatus(){
   });
 }
 function openSettings(){
-  $('#sGeminiKeys').value=S.geminiKeys;$('#sGrokKeys').value=S.grokKeys;$('#sGeminiModel').value=S.geminiModel;$('#sGrokModel').value=S.grokModel;
+  $('#sGeminiKeys').value=S.geminiKeys;$('#sGrokKeys').value=S.grokKeys;$('#sGroqKeys').value=S.groqKeys;$('#sGeminiModel').value=S.geminiModel;$('#sGrokModel').value=S.grokModel;$('#sGroqModel').value=S.groqModel;
   $('#sOrder').value=S.order;$('#sTessLang').value=S.tessLang;$('#sTessLocal').value=S.tessLocal;$('#sPrompt').value=S.prompt;
   $('#sEmbedded').checked=S.preferEmbedded;$('#sAutoCopy').checked=S.autoCopy;
   renderKeyStatus();$('#modal').classList.add('show');
 }
 function saveSettings(){
-  S.geminiKeys=$('#sGeminiKeys').value;S.grokKeys=$('#sGrokKeys').value;
-  S.geminiModel=$('#sGeminiModel').value.trim()||DEF.geminiModel;S.grokModel=$('#sGrokModel').value.trim()||DEF.grokModel;
+  S.geminiKeys=$('#sGeminiKeys').value;S.grokKeys=$('#sGrokKeys').value;S.groqKeys=$('#sGroqKeys').value;
+  S.geminiModel=$('#sGeminiModel').value.trim()||DEF.geminiModel;S.grokModel=$('#sGrokModel').value.trim()||DEF.grokModel;S.groqModel=$('#sGroqModel').value.trim()||DEF.groqModel;
   S.order=$('#sOrder').value;S.tessLang=$('#sTessLang').value.trim()||'tur+eng';S.tessLocal=$('#sTessLocal').value.trim();
   S.prompt=$('#sPrompt').value.trim()||DEF.prompt;S.preferEmbedded=$('#sEmbedded').checked;S.autoCopy=$('#sAutoCopy').checked;
   save();$('#modal').classList.remove('show');toast('Ayarlar kaydedildi');
