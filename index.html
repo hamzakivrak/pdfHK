@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>PDF Okuyucu + OCR</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2f6df6">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <style>
 :root{--bg:#f4f5f7;--bg2:#e3e6ea;--panel:#ffffff;--text:#1d2330;--muted:#6b7385;--line:#d5d9e0;--accent:#2f6df6;--accent2:#e8efff;--danger:#d93a3a;--ok:#1f9d55}
 body.dark{--bg:#1b1e25;--bg2:#12141a;--panel:#252932;--text:#e6e9ef;--muted:#9aa3b5;--line:#383d4a;--accent:#6d9bff;--accent2:#2b3550;--danger:#ff7070;--ok:#4cd083}
@@ -128,6 +132,7 @@ label.chk input{width:auto}
  <button id="btnTheme" title="Arayüz teması">🎨</button>
  <button id="btnResults" title="Metin paneli">📋</button>
  <button id="btnSettings" title="Ayarlar / API anahtarları">⚙️</button>
+ <button id="btnInstall" class="primary" style="display:none" title="Uygulama olarak yükle">⬇️ Yükle</button>
  <span id="net">● Çevrimiçi</span>
 </div>
 
@@ -822,6 +827,37 @@ function net(){const n=$('#net');const on=navigator.onLine;n.textContent=on?'●
 addEventListener('online',net);addEventListener('offline',net);net();
 addEventListener('resize',()=>{});
 addEventListener('beforeunload',()=>tabs.forEach(savePos));
+/* ---------- PWA: dosya ilişkilendirme, paylaşım hedefi, yükleme ---------- */
+if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+// Windows/Chromium: PDF'e sağ tık > Birlikte aç ile gelen dosyalar
+if('launchQueue' in window){
+  launchQueue.setConsumer(async p=>{
+    if(!p||!p.files||!p.files.length)return;
+    const fs=[];for(const h of p.files){try{fs.push(await h.getFile())}catch(e){}}
+    if(fs.length)openFiles(fs);
+  });
+}
+// Android: Paylaş menüsünden gelen PDF'ler (sw.js önbelleğe bırakır, burada açılır)
+(async()=>{
+  if(!/[?&]shared=/.test(location.search)||!('caches' in window))return;
+  try{
+    const c=await caches.open('pdfocr-share'),reqs=await c.keys(),files=[];
+    for(const r of reqs){
+      const res=await c.match(r);if(!res)continue;
+      const name=decodeURIComponent(res.headers.get('X-Name')||'paylasilan.pdf');
+      files.push(new File([await res.blob()],name,{type:'application/pdf'}));
+      await c.delete(r);
+    }
+    history.replaceState(null,'',location.pathname);
+    if(files.length)openFiles(files);else toast('Paylaşılan dosya bulunamadı');
+  }catch(e){toast('Paylaşılan dosya açılamadı')}
+})();
+let installEv=null;
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEv=e;$('#btnInstall').style.display=''});
+addEventListener('appinstalled',()=>{installEv=null;$('#btnInstall').style.display='none';toast('Uygulama yüklendi')});
+$('#btnInstall').onclick=async()=>{if(!installEv)return;installEv.prompt();try{await installEv.userChoice}catch(e){}installEv=null;$('#btnInstall').style.display='none'};
 applyTheme();renderHist();
 })();
 </script>
