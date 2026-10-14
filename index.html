@@ -184,11 +184,12 @@ label.chk input{width:auto}
 <div id="modal"><div class="box">
  <h3>⚙️ Ayarlar</h3>
  <div class="f"><span>Gemini API anahtarları (her satıra bir tane). Kota bitince sıradakine geçilir.</span><textarea id="sGeminiKeys" rows="3" placeholder="AIza…"></textarea></div>
- <div class="f"><span>Gemini model adı (görüntü destekleyen bir model olmalı)</span><input type="text" id="sGeminiModel"></div>
+ <div class="f"><span>Gemini model adı (görüntü destekleyen bir model olmalı)</span><input type="text" id="sGeminiModel" list="dlGemini"><datalist id="dlGemini"></datalist><div><button type="button" class="mfetch" data-p="gemini">Modelleri getir</button></div></div>
  <div class="f"><span>Grok (xAI) API anahtarları (her satıra bir tane)</span><textarea id="sGrokKeys" rows="3" placeholder="xai-…"></textarea></div>
- <div class="f"><span>Grok model adı (görüntü destekleyen bir model olmalı)</span><input type="text" id="sGrokModel"></div>
+ <div class="f"><span>Grok model adı (görüntü destekleyen bir model olmalı; örn. grok-4.7)</span><input type="text" id="sGrokModel" list="dlGrok"><datalist id="dlGrok"></datalist><div><button type="button" class="mfetch" data-p="grok">Modelleri getir</button></div></div>
  <div class="f"><span>Groq API anahtarları (Llama modelleri; gsk_ ile başlar, her satıra bir tane)</span><textarea id="sGroqKeys" rows="3" placeholder="gsk_…"></textarea></div>
- <div class="f"><span>Groq model adı (görüntü destekleyen Llama modeli olmalı)</span><input type="text" id="sGroqModel"></div>
+ <div class="f"><span>Groq model adı (görüntü destekleyen bir model olmalı; örn. qwen/qwen3.8-27b)</span><input type="text" id="sGroqModel" list="dlGroq"><datalist id="dlGroq"></datalist><div><button type="button" class="mfetch" data-p="groq">Modelleri getir</button></div></div>
+ <div class="hint" id="mstat"></div>
  <div class="f"><span>Motor öncelik sırası</span>
   <select id="sOrder">
    <option value="gemini,grok,groq,tesseract">Gemini → Grok → Groq → Tesseract (çevrimdışı)</option>
@@ -221,10 +222,13 @@ const PDFJS_WORKER_CDN='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/p
 const TESS_CDN='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
 
 /* ---------- Ayarlar ---------- */
-const DEF={geminiKeys:'',grokKeys:'',groqKeys:'',geminiModel:'gemini-2.5-flash',grokModel:'grok-4',groqModel:'meta-llama/llama-4-scout-17b-16e-instruct',order:'gemini,grok,groq,tesseract',tessLang:'tur+eng',tessLocal:'',preferEmbedded:true,autoCopy:true,night:false,dark:false,append:false,
+const DEF={geminiKeys:'',grokKeys:'',groqKeys:'',geminiModel:'gemini-2.5-flash',grokModel:'grok-4.7',groqModel:'qwen/qwen3.8-27b',order:'gemini,grok,groq,tesseract',tessLang:'tur+eng',tessLocal:'',preferEmbedded:true,autoCopy:true,night:false,dark:false,append:false,
 prompt:'Bu görseldeki metni olduğu gibi, satır yapısını ve yazım düzenini koruyarak yaz. Yorum, açıklama veya başlık ekleme; yalnızca görseldeki metni ver. Tablo varsa satırları koru, hücreleri sekme ile ayır. Görselde metin yoksa boş yanıt ver.'};
 let S=Object.assign({},DEF);
 try{Object.assign(S,JSON.parse(localStorage.getItem(LS)||'{}'))}catch(e){}
+// Eski varsayılan model adları artık geçerli değil; kullanıcı özelleştirmediyse yenisine geç
+if(S.groqModel==='meta-llama/llama-4-scout-17b-16e-instruct')S.groqModel=DEF.groqModel;
+if(S.grokModel==='grok-4')S.grokModel=DEF.grokModel;
 const save=()=>{try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}};
 const split=t=>(t||'').split(/[\n,]+/).map(s=>s.trim()).filter(Boolean);
 // gsk_ ile başlayan anahtarlar Groq'a aittir; Grok kutusuna yanlışlıkla girilse bile Groq'a yönlendirilir
@@ -727,6 +731,45 @@ $('#btnRetry').onclick=()=>{
   if(!tabs.includes(lastCrop.tab))return toast('Bu sekme kapatılmış');
   const f=$('#retryEngine').value||undefined;doOcr(lastCrop.tab,lastCrop.i,lastCrop.rect,f,true);
 };
+async function fetchModels(p){
+  const st=$('#mstat'),g=split($('#sGrokKeys').value);
+  const keys=p==='gemini'?split($('#sGeminiKeys').value):p==='grok'?g.filter(k=>!k.startsWith('gsk_')):[...new Set([...split($('#sGroqKeys').value),...g.filter(k=>k.startsWith('gsk_'))])];
+  if(!keys.length){st.textContent=LABEL[p]+': önce yukarıya bir anahtar girin.';return}
+  st.textContent=LABEL[p]+' model listesi alınıyor…';
+  try{
+    let ids=[];
+    if(p==='gemini'){
+      const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200',{headers:{'x-goog-api-key':keys[0]}});
+      const j=await r.json();if(!r.ok)throw new Error((j.error&&j.error.message)||('HTTP '+r.status));
+      ids=(j.models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes('generateContent')&&/gemini/i.test(m.name)).map(m=>m.name.replace(/^models\//,''));
+    }else if(p==='grok'){
+      const h={Authorization:'Bearer '+keys[0]};
+      let r=await fetch('https://api.x.ai/v1/language-models',{headers:h}),j=await r.json().catch(()=>({}));
+      if(r.ok&&Array.isArray(j.models)){
+        ids=j.models.filter(m=>(m.input_modalities||[]).includes('image')).map(m=>m.id);
+        if(!ids.length)ids=j.models.map(m=>m.id);
+      }else{
+        r=await fetch('https://api.x.ai/v1/models',{headers:h});j=await r.json();
+        if(!r.ok)throw new Error((j.error&&(j.error.message||j.error))||('HTTP '+r.status));
+        ids=(j.data||[]).map(m=>m.id);
+      }
+    }else{
+      const r=await fetch('https://api.groq.com/openai/v1/models',{headers:{Authorization:'Bearer '+keys[0]}});
+      const j=await r.json();if(!r.ok)throw new Error((j.error&&(j.error.message||j.error))||('HTTP '+r.status));
+      ids=(j.data||[]).map(m=>m.id).filter(id=>!/whisper|tts|guard|playai|orpheus/i.test(id));
+      const likely=id=>/vision|scout|maverick|qwen|llama-4|vl/i.test(id)?0:1;
+      ids.sort((a,b)=>likely(a)-likely(b)||a.localeCompare(b));
+    }
+    const dl={gemini:'#dlGemini',grok:'#dlGrok',groq:'#dlGroq'}[p];
+    $(dl).innerHTML='';ids.forEach(id=>{const o=document.createElement('option');o.value=id;$(dl).append(o)});
+    const inp=$({gemini:'#sGeminiModel',grok:'#sGrokModel',groq:'#sGroqModel'}[p]);
+    st.textContent=LABEL[p]+': '+ids.length+' model bulundu. Model alanına tıklayıp listeden seçin (hepsi görsel desteklemeyebilir'+(p==='groq'?'; görsel destekli olanlar üstte':'')+'). İlk 8: '+ids.slice(0,8).join(', ');
+    inp.focus();
+  }catch(e){
+    st.textContent=LABEL[p]+' model listesi alınamadı: '+(e.message||e)+(/failed to fetch|networkerror|load failed/i.test(e.message||'')?' (tarayıcı isteği engelledi: CORS/ağ sorunu olabilir)':'');
+  }
+}
+document.querySelectorAll('.mfetch').forEach(b=>{b.onclick=()=>fetchModels(b.dataset.p)});
 $('#btnSettings').onclick=openSettings;
 $('#btnCancelSet').onclick=()=>$('#modal').classList.remove('show');
 $('#btnSaveSet').onclick=saveSettings;
