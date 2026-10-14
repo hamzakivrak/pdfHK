@@ -78,7 +78,7 @@ kbd{background:var(--panel);border:1px solid var(--line);border-radius:4px;paddi
 #ocrStatus.err{color:var(--danger)}
 #ocrStatus.spin::before{content:"";display:inline-block;width:11px;height:11px;margin-right:6px;border:2px solid var(--accent);border-right-color:transparent;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px}
 @keyframes sp{to{transform:rotate(360deg)}}
-#resText{min-height:180px;flex:1;font-size:14px}
+#resText{min-height:180px;flex:1;font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:1.5;text-align:justify;text-justify:inter-word;hyphens:auto}
 .btnrow{display:flex;gap:6px;flex-wrap:wrap}
 .hist{border:1px solid var(--line);border-radius:8px;max-height:150px;overflow:auto}
 .hist div{padding:5px 8px;font-size:12px;border-bottom:1px solid var(--line);cursor:pointer}
@@ -162,9 +162,12 @@ label.chk input{width:auto}
    <div class="btnrow">
     <button id="btnCopy" class="primary">Kopyala</button>
     <button id="btnSave">.txt indir</button>
+    <button id="btnDoc" title="Times New Roman 12 punto, iki yana yaslı; Word'de açılır">.doc indir</button>
     <button id="btnClearRes" class="danger">Temizle</button>
    </div>
    <label class="chk"><input type="checkbox" id="optAppend"> Yeni sonuçları alta ekle (üstüne yazma)</label>
+   <label class="chk"><input type="checkbox" id="optJoin"> Satır sonlarını birleştirip paragraf yap</label>
+   <div class="btnrow"><button id="btnJoin" title="Paneldeki metnin satır sonlarını paragraf olarak birleştirir">¶ Şimdi birleştir</button></div>
    <div class="btnrow" style="align-items:center">
     <select id="retryEngine" style="width:auto">
      <option value="">Otomatik sıra</option>
@@ -600,8 +603,48 @@ async function runOcr(canvas,force){
 /* ---------- OCR akışı ve sonuç paneli ---------- */
 function setOcrStatus(m,spin,err){const e=$('#ocrStatus');e.textContent=m;e.className=(spin?'spin ':'')+(err?'err':'')}
 function openResults(){$('#results').classList.add('show')}
+/* ---------- Biçim: paragraf birleştirme, Word uyumlu kopyalama ---------- */
+const ITEMRE=/^(\d+(\.\d+)*[\.\)]|\(?[a-zçğıöşü][\.\)]|[-•*–])\s+/i;
+function joinParas(t){
+  return String(t).replace(/\r/g,'').split(/\n\s*\n/).map(block=>{
+    const out=[];
+    for(const raw of block.split('\n')){
+      const l=raw.trim();if(!l)continue;
+      if(out.length){
+        const p=out[out.length-1];
+        const heading=(ITEMRE.test(p)&&p.length<80&&!/[.;!?]$/.test(p))||(/:$/.test(p)&&p.length<80);
+        if(!heading&&!ITEMRE.test(l)){
+          if(/[A-Za-zçğıöşüÇĞİÖŞÜ]-$/.test(p)&&/^[a-zçğıöşü]/.test(l))out[out.length-1]=p.slice(0,-1)+l;
+          else out[out.length-1]=p+' '+l;
+          continue;
+        }
+      }
+      out.push(l);
+    }
+    return out.join('\n');
+  }).filter(Boolean).join('\n\n').trim();
+}
+const escH=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const PSTYLE="margin:0 0 6pt 0;text-align:justify;text-justify:inter-word;line-height:150%;font-family:'Times New Roman',serif;font-size:12pt";
+function parasHtml(text){return text.split(/\n+/).map(l=>l.trim()).filter(Boolean).map(l=>'<p style="'+PSTYLE+'">'+escH(l)+'</p>').join('')}
+async function copyRich(text){
+  try{
+    if(window.ClipboardItem&&navigator.clipboard&&navigator.clipboard.write){
+      const html='<div style="font-family:\'Times New Roman\',serif;font-size:12pt">'+parasHtml(text)+'</div>';
+      await navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([html],{type:'text/html'}),'text/plain':new Blob([text],{type:'text/plain'})})]);
+      return true;
+    }
+  }catch(e){}
+  return copyText(text);
+}
+function downloadDoc(text){
+  const html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>OCR</title><style>@page WordSection1{size:21cm 29.7cm;margin:2.5cm}div.WordSection1{page:WordSection1}</style></head><body><div class="WordSection1">'+parasHtml(text)+'</div></body></html>';
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿',html],{type:'application/msword;charset=utf-8'}));
+  a.download='ocr-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.doc';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
 const history=[];
 function pushResult(text,meta){
+  if(S.join!==false)text=joinParas(text);
   openResults();
   const ta=$('#resText');
   if($('#optAppend').checked&&ta.value.trim())ta.value+='\n\n'+text;else ta.value=text;
@@ -640,7 +683,7 @@ async function finish(text,engine,where,notes){
   pushResult(text,engine+' · '+where);
   let msg='Tamam · '+engine;
   if(notes&&notes.length)msg+=' (atlanan: '+notes.join('; ')+')';
-  if(S.autoCopy&&text.trim()){const ok=await copyText($('#resText').value);if(ok)msg+=' · panoya kopyalandı'}
+  if(S.autoCopy&&text.trim()){const ok=await copyRich($('#resText').value);if(ok)msg+=' · panoya kopyalandı'}
   setOcrStatus(msg);
 }
 
@@ -723,7 +766,8 @@ $('#btnNight').onclick=()=>{S.night=!S.night;save();applyTheme()};
 $('#btnTheme').onclick=()=>{S.dark=!S.dark;save();applyTheme()};
 $('#btnResults').onclick=()=>$('#results').classList.toggle('show');
 $('#btnCloseRes').onclick=()=>$('#results').classList.remove('show');
-$('#btnCopy').onclick=async()=>{const t=$('#resText').value;if(!t.trim())return toast('Kopyalanacak metin yok');toast(await copyText(t)?'Kopyalandı':'Kopyalanamadı')};
+$('#btnCopy').onclick=async()=>{const t=$('#resText').value;if(!t.trim())return toast('Kopyalanacak metin yok');toast(await copyRich(t)?'Kopyalandı':'Kopyalanamadı')};
+$('#btnDoc').onclick=()=>{const t=$('#resText').value;if(!t.trim())return toast('Kaydedilecek metin yok');downloadDoc(t)};
 $('#btnSave').onclick=()=>{
   const t=$('#resText').value;if(!t.trim())return toast('Kaydedilecek metin yok');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));
@@ -731,6 +775,8 @@ $('#btnSave').onclick=()=>{
 };
 $('#btnClearRes').onclick=()=>{$('#resText').value='';setOcrStatus('')};
 $('#optAppend').checked=!!S.append;$('#optAppend').onchange=e=>{S.append=e.target.checked;save()};
+$('#optJoin').checked=S.join!==false;$('#optJoin').onchange=e=>{S.join=e.target.checked;save()};
+$('#btnJoin').onclick=()=>{const ta=$('#resText');if(!ta.value.trim())return toast('Birleştirilecek metin yok');ta.value=joinParas(ta.value);toast('Paragraflar birleştirildi')};
 $('#btnRetry').onclick=()=>{
   if(!lastCrop)return toast('Önce bir bölge seçin');
   if(!tabs.includes(lastCrop.tab))return toast('Bu sekme kapatılmış');
