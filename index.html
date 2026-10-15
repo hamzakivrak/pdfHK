@@ -66,6 +66,20 @@ body.night .thumb canvas{filter:invert(.9) hue-rotate(180deg)}
 .ocrmode .textLayer{pointer-events:none}
 .ocrmode .page{cursor:crosshair;touch-action:none}
 .selbox{position:absolute;border:2px dashed var(--accent);background:rgba(47,109,246,.18);pointer-events:none;z-index:5}
+.selbox.fixed{pointer-events:auto;cursor:move;touch-action:none}
+.selbox .hd{position:absolute;width:12px;height:12px;margin:-7px 0 0 -7px;background:#fff;border:2px solid var(--accent);border-radius:3px;touch-action:none}
+.selbox .hd::after{content:"";position:absolute;inset:-9px}
+.selbox .hd[data-h=nw]{left:0;top:0;cursor:nwse-resize}
+.selbox .hd[data-h=n]{left:50%;top:0;cursor:ns-resize}
+.selbox .hd[data-h=ne]{left:100%;top:0;cursor:nesw-resize}
+.selbox .hd[data-h=e]{left:100%;top:50%;cursor:ew-resize}
+.selbox .hd[data-h=se]{left:100%;top:100%;cursor:nwse-resize}
+.selbox .hd[data-h=s]{left:50%;top:100%;cursor:ns-resize}
+.selbox .hd[data-h=sw]{left:0;top:100%;cursor:nesw-resize}
+.selbox .hd[data-h=w]{left:0;top:50%;cursor:ew-resize}
+.selbar{position:absolute;left:0;top:-40px;display:flex;gap:4px;cursor:default}
+.selbar.below{top:auto;bottom:-40px}
+.selbar button{padding:4px 9px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.3)}
 #empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:20px;color:var(--muted)}
 #empty h2{margin:0;color:var(--text)}
 #empty .kb{font-size:12px;line-height:1.9}
@@ -250,6 +264,7 @@ label.chk input{width:auto}
  <div class="f"><span>OCR komutu (modele gönderilen)</span><textarea id="sPrompt" rows="3"></textarea></div>
  <label class="chk"><input type="checkbox" id="sEmbedded"> Seçilen bölgede PDF'in kendi metni varsa OCR yerine onu kullan (hızlı, ücretsiz)</label>
  <label class="chk"><input type="checkbox" id="sAutoCopy"> Sonuç çıkınca panoya otomatik kopyala</label>
+ <label class="chk"><input type="checkbox" id="sAutoRe"> Seçim kutusunu ayarlayınca otomatik tekrar çıkar (API kotası harcayabilir)</label>
  <div class="f"><span>Çıkarılan metin biçimi (panel, kopyalama ve .doc için): yazı tipi, punto, satır aralığı</span>
   <div class="btnrow" style="align-items:center">
    <input type="text" id="sFontFamily" list="dlFonts" style="flex:2;min-width:150px"><datalist id="dlFonts"><option value="Times New Roman"><option value="Arial"><option value="Calibri"><option value="Cambria"><option value="Georgia"><option value="Verdana"><option value="Courier New"></datalist>
@@ -279,7 +294,7 @@ const PDFJS_WORKER_CDN='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/p
 const TESS_CDN='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
 
 /* ---------- Ayarlar ---------- */
-const DEF={geminiKeys:'',groqKeys:'',geminiModel:'gemini-2.5-flash',groqModel:'qwen/qwen3.8-27b',order:'gemini,groq,tesseract',tessLang:'tur+eng',tessLocal:'',preferEmbedded:true,autoCopy:true,night:false,dark:false,append:false,fontFamily:'Times New Roman',fontSize:12,justify:true,lineSpacing:1.5,joinMode:'first',joinKeep:1,
+const DEF={geminiKeys:'',groqKeys:'',geminiModel:'gemini-2.5-flash',groqModel:'qwen/qwen3.8-27b',order:'gemini,groq,tesseract',tessLang:'tur+eng',tessLocal:'',preferEmbedded:true,autoCopy:true,night:false,dark:false,append:false,fontFamily:'Times New Roman',fontSize:12,justify:true,lineSpacing:1.5,joinMode:'first',joinKeep:1,autoRe:false,
 prompt:'Bu görseldeki metni olduğu gibi, satır yapısını ve yazım düzenini koruyarak yaz. Yorum, açıklama veya başlık ekleme; yalnızca görseldeki metni ver. Tablo varsa satırları koru, hücreleri sekme ile ayır. Görselde metin yoksa boş yanıt ver.'};
 let S=Object.assign({},DEF);
 try{Object.assign(S,JSON.parse(localStorage.getItem(LS)||'{}'))}catch(e){}
@@ -425,7 +440,7 @@ async function renderPage(tab,i){
   w._task=task;
   try{await task.promise}catch(e){return}
   if(rid!==w._rid||!w._want)return;
-  w._task=null;w.append(c);
+  w._task=null;w.append(c);restoreSel(tab,i);
   try{
     const tc=await page.getTextContent();
     if(rid!==w._rid)return;
@@ -500,6 +515,7 @@ function activate(tab){
 }
 function closeTab(tab){
   const i=tabs.indexOf(tab);if(i<0)return;
+  if(sel&&sel.tab===tab)clearSel();
   savePos(tab);tab.io.disconnect();tab.tio.disconnect();
   tab.viewer.remove();tab.thumbsEl.remove();try{tab.doc.destroy()}catch(e){}
   tabs.splice(i,1);
@@ -509,13 +525,14 @@ function closeTab(tab){
 
 /* ---------- Mod / seçim ---------- */
 function setMode(m){
-  mode=m;$('#viewers').classList.toggle('ocrmode',m==='ocr');
+  mode=m;if(m==='text')clearSel();$('#viewers').classList.toggle('ocrmode',m==='ocr');
   $('#btnModeOcr').classList.toggle('on',m==='ocr');$('#btnModeText').classList.toggle('on',m==='text');
-  if(m==='ocr')toast('Sayfada bir alan sürükleyerek seçin',1800);
+  if(m==='ocr')toast('Bir alan sürükleyin; sonra kutuyu taşıyabilir, kenar ve köşelerinden ayarlayabilirsiniz',3500);
 }
 function onSelectDown(tab,e){
   if(mode!=='ocr'||e.button>0)return;
   const wrap=e.target.closest('.page');if(!wrap)return;
+  clearSel();
   e.preventDefault();
   const rb=wrap.getBoundingClientRect(),x0=clamp(e.clientX-rb.left,0,rb.width),y0=clamp(e.clientY-rb.top,0,rb.height);
   const box=document.createElement('div');box.className='selbox';wrap.append(box);
@@ -526,10 +543,83 @@ function onSelectDown(tab,e){
   const up=async()=>{
     wrap.removeEventListener('pointermove',move);wrap.removeEventListener('pointerup',up);wrap.removeEventListener('pointercancel',up);
     const rect={x:Math.min(x0,x1),y:Math.min(y0,y1),w:Math.abs(x1-x0),h:Math.abs(y1-y0)};
-    if(rect.w<10||rect.h<10){box.remove();return}
-    await doOcr(tab,+wrap.dataset.i,rect);box.remove();
+    box.remove();
+    if(rect.w<10||rect.h<10)return;
+    setSel(tab,+wrap.dataset.i,rect);
+    await doOcr(tab,+wrap.dataset.i,rect);
   };
   wrap.addEventListener('pointermove',move);wrap.addEventListener('pointerup',up);wrap.addEventListener('pointercancel',up);
+}
+
+/* ---------- Seçim kutusu: taşı, boyutlandır, yeniden çıkar ---------- */
+// Konum sayfa genişlik/yüksekliğinin oranı olarak tutulur; yakınlaştırma ve yeniden sığdırmada hizası bozulmaz.
+let sel=null;
+function clearSel(){if(sel&&sel.el)sel.el.remove();sel=null}
+function setSel(tab,i,rect){
+  clearSel();
+  const w=tab.wraps[i],W=w.offsetWidth||1,H=w.offsetHeight||1;
+  sel={tab,i,fx:rect.x/W,fy:rect.y/H,fw:rect.w/W,fh:rect.h/H,dirty:false,el:null};
+  placeSel();
+}
+function selRect(){const w=sel.tab.wraps[sel.i],W=w.offsetWidth,H=w.offsetHeight;return{x:sel.fx*W,y:sel.fy*H,w:sel.fw*W,h:sel.fh*H}}
+function restoreSel(tab,i){if(sel&&sel.tab===tab&&sel.i===i&&(!sel.el||!sel.el.isConnected))placeSel()}
+function placeSel(){
+  if(!sel)return;
+  if(sel.el)sel.el.remove();
+  const w=sel.tab.wraps[sel.i],el=document.createElement('div');
+  el.className='selbox fixed';
+  el.innerHTML=['nw','n','ne','e','se','s','sw','w'].map(h=>'<i class="hd" data-h="'+h+'"></i>').join('')+
+    '<div class="selbar"><button class="primary" data-a="re" title="Bu alandan metni yeniden çıkar (Enter)">↻ Yeniden çıkar</button><button data-a="x" title="Seçimi kaldır (Esc)">✕</button></div>';
+  w.append(el);sel.el=el;
+  el.addEventListener('pointerdown',e=>{
+    if(e.target.closest('.selbar')){e.stopPropagation();return}
+    const hd=e.target.closest('.hd');
+    startSelDrag(e,hd?hd.dataset.h:'move');
+  });
+  el.querySelector('.selbar').addEventListener('click',e=>{
+    const b=e.target.closest('button');if(!b)return;
+    if(b.dataset.a==='re')reOcr();else clearSel();
+  });
+  positionSel();
+}
+function positionSel(){
+  const s=sel;if(!s||!s.el)return;
+  const e=s.el,w=s.tab.wraps[s.i];
+  e.style.left=s.fx*100+'%';e.style.top=s.fy*100+'%';e.style.width=s.fw*100+'%';e.style.height=s.fh*100+'%';
+  e.querySelector('.selbar').classList.toggle('below',s.fy*w.offsetHeight<44);
+}
+function startSelDrag(e,m){
+  if(!sel||e.button>0)return;
+  e.preventDefault();e.stopPropagation();
+  const el=sel.el,w=sel.tab.wraps[sel.i],rb=w.getBoundingClientRect();
+  const st={x:e.clientX,y:e.clientY,fx:sel.fx,fy:sel.fy,fw:sel.fw,fh:sel.fh};
+  const mw=14/rb.width,mh=14/rb.height;
+  try{el.setPointerCapture(e.pointerId)}catch(_){}
+  const mv=ev=>{
+    if(!sel)return;
+    const dx=(ev.clientX-st.x)/rb.width,dy=(ev.clientY-st.y)/rb.height;
+    let x1=st.fx,y1=st.fy,x2=st.fx+st.fw,y2=st.fy+st.fh;
+    if(m==='move'){
+      const nx=clamp(st.fx+dx,0,1-st.fw),ny=clamp(st.fy+dy,0,1-st.fh);
+      x1=nx;y1=ny;x2=nx+st.fw;y2=ny+st.fh;
+    }else{
+      if(m.includes('w'))x1=clamp(x1+dx,0,x2-mw);
+      if(m.includes('e'))x2=clamp(x2+dx,x1+mw,1);
+      if(m.includes('n'))y1=clamp(y1+dy,0,y2-mh);
+      if(m.includes('s'))y2=clamp(y2+dy,y1+mh,1);
+    }
+    sel.fx=x1;sel.fy=y1;sel.fw=x2-x1;sel.fh=y2-y1;sel.dirty=true;positionSel();
+  };
+  const up=()=>{
+    el.removeEventListener('pointermove',mv);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',up);
+    if(sel&&sel.dirty&&S.autoRe)reOcr();
+  };
+  el.addEventListener('pointermove',mv);el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);
+}
+async function reOcr(){
+  if(!sel)return;
+  const s=sel;s.dirty=false;
+  await doOcr(s.tab,s.i,selRect());
 }
 
 /* ---------- Görüntü kırpma ve gömülü metin ---------- */
@@ -818,7 +908,7 @@ function openSettings(){
   const so=$('#sOrder');so.value=S.order;if(so.value!==S.order)so.selectedIndex=0;
   $('#sFontFamily').value=S.fontFamily;$('#sFontSize').value=S.fontSize;$('#sLine').value=String(S.lineSpacing);$('#sJustify').checked=!!S.justify;
   $('#sJoinMode').value=S.joinMode;$('#sJoinKeep').value=S.joinKeep;$('#sTessLang').value=S.tessLang;$('#sTessLocal').value=S.tessLocal;$('#sPrompt').value=S.prompt;
-  $('#sEmbedded').checked=S.preferEmbedded;$('#sAutoCopy').checked=S.autoCopy;
+  $('#sEmbedded').checked=S.preferEmbedded;$('#sAutoCopy').checked=S.autoCopy;$('#sAutoRe').checked=!!S.autoRe;
   renderKeyStatus();$('#modal').classList.add('show');
 }
 function saveSettings(){
@@ -831,7 +921,7 @@ function saveSettings(){
   const jk=parseInt($('#sJoinKeep').value);S.joinKeep=isNaN(jk)?DEF.joinKeep:Math.min(20,Math.max(0,jk));
   applyFormat();
   S.order=$('#sOrder').value;S.tessLang=$('#sTessLang').value.trim()||'tur+eng';S.tessLocal=$('#sTessLocal').value.trim();
-  S.prompt=$('#sPrompt').value.trim()||DEF.prompt;S.preferEmbedded=$('#sEmbedded').checked;S.autoCopy=$('#sAutoCopy').checked;
+  S.prompt=$('#sPrompt').value.trim()||DEF.prompt;S.preferEmbedded=$('#sEmbedded').checked;S.autoCopy=$('#sAutoCopy').checked;S.autoRe=$('#sAutoRe').checked;
   save();$('#modal').classList.remove('show');toast('Ayarlar kaydedildi');
 }
 
@@ -848,7 +938,7 @@ $('#btnZoomIn').onclick=()=>active&&setScale(active,active.scale*1.2);
 $('#btnZoomOut').onclick=()=>active&&setScale(active,active.scale/1.2);
 $('#btnFitW').onclick=()=>active&&fitWidth(active);
 $('#btnFitP').onclick=()=>active&&fitPage(active);
-$('#btnRot').onclick=()=>{if(!active)return;active.rot=(active.rot+90)%360;layout(active)};
+$('#btnRot').onclick=()=>{if(!active)return;clearSel();active.rot=(active.rot+90)%360;layout(active)};
 $('#btnModeText').onclick=()=>setMode('text');
 $('#btnModeOcr').onclick=()=>setMode(mode==='ocr'?'text':'ocr');
 $('#btnPageOcr').onclick=()=>{if(!active)return toast('Önce bir PDF açın');doOcr(active,active.cur-1,null)};
@@ -875,7 +965,9 @@ $('#btnJoin').onclick=()=>{const ta=$('#resText');if(!ta.value.trim())return toa
 $('#btnRetry').onclick=()=>{
   if(!lastCrop)return toast('Önce bir bölge seçin');
   if(!tabs.includes(lastCrop.tab))return toast('Bu sekme kapatılmış');
-  const f=$('#retryEngine').value||undefined;doOcr(lastCrop.tab,lastCrop.i,lastCrop.rect,f,true);
+  const f=$('#retryEngine').value||undefined;
+  const rect=(lastCrop.rect&&sel&&sel.tab===lastCrop.tab&&sel.i===lastCrop.i)?selRect():lastCrop.rect;
+  doOcr(lastCrop.tab,lastCrop.i,rect,f,true);
 };
 async function fetchModels(p){
   const st=$('#mstat');
@@ -954,6 +1046,7 @@ addEventListener('keydown',e=>{
   else if(k==='ArrowLeft'){e.preventDefault();goPage(active.cur-1)}
   else if(k==='Home'){e.preventDefault();goPage(1)}
   else if(k==='End'){e.preventDefault();goPage(active.pages.length)}
+  else if(k==='Enter'&&sel){e.preventDefault();reOcr()}
 });
 
 /* ---------- Dosya işlemleri: yazdır, kaydet, klasörden aç ---------- */
