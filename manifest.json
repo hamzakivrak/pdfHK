@@ -20,6 +20,7 @@
   "file_handlers": [
     {
       "action": "./index.html",
+      "launch_type": "single-client",
       "accept": { "application/pdf": [".pdf"] }
     }
   ],
