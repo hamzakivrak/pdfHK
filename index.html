@@ -121,7 +121,8 @@ label.chk input{width:auto}
 #modal.show,#printModal.show,#phoneModal.show{display:flex}
 #modal .box,#printModal .box,#phoneModal .box{background:var(--panel);border-radius:14px;width:min(640px,100%);max-height:92vh;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
 #modal h3,#printModal h3,#phoneModal h3{margin:0}
-#phoneModal .g,#phoneModal .h,#phoneModal .i{display:none}
+#phoneModal .g,#phoneModal .h,#phoneModal .i,#phoneModal .ij{display:none}
+#phoneModal[data-role=idle] .ij,#phoneModal[data-role=guest] .ij{display:flex;flex-direction:column;gap:4px}
 #phoneModal[data-role=host] .h,#phoneModal[data-role=guest] .g,#phoneModal[data-role=idle] .i{display:flex;flex-direction:column;gap:8px}
 #phoneModal .qrbox{display:flex;flex-direction:column;align-items:center;gap:6px}
 #phoneModal.conn .qrbox{display:none}
@@ -294,8 +295,9 @@ label.chk input{width:auto}
  <div class="i">
   <div>Telefonla çektiğiniz fotoğraflar bu bilgisayardaki uygulamaya anında düşer.</div>
   <button id="phStart" class="primary">Bu bilgisayarı eşleştir (QR göster)</button>
-  <div class="f"><span>Telefondaysanız: bilgisayardaki kodu girin</span><div class="btnrow"><input type="text" id="phJoinCode" placeholder="abcd-efgh-ijkl" style="flex:1;min-width:160px" autocomplete="off" autocapitalize="off"><button id="phJoin">Bağlan</button></div></div>
+
  </div>
+ <div class="ij f"><span>Telefondaysanız: bilgisayardaki <b>güncel</b> kodu girin</span><div class="btnrow"><input type="text" id="phJoinCode" placeholder="abcd-efgh-ijkl" style="flex:1;min-width:160px" autocomplete="off" autocapitalize="off"><button id="phJoin">Bağlan</button></div></div>
  <div class="h">
   <div class="qrbox"><canvas id="phQr"></canvas><div>Telefonla QR'ı okutun (kamera uygulaması) ya da kodu girin:</div><div id="phCode"></div><div class="btnrow"><button id="phCopyLink">Bağlantıyı kopyala</button></div></div>
   <div class="f"><span>Gelen fotoğraflar</span>
@@ -305,7 +307,7 @@ label.chk input{width:auto}
   <div id="phList"></div>
  </div>
  <div class="g">
-  <div>Bu cihaz telefon olarak bağlı. Çektiğiniz fotoğraflar bilgisayara gönderilir.</div>
+  <div>Bu cihaz telefon olarak bağlı. Aranan kod: <b id="phGCode"></b><br><span class="hint">Bilgisayarda "Bağlantıyı kes"ten sonra yeni QR/kod oluşturduysanız, aşağıya yeni kodu girin.</span></div>
   <button id="phOpenCam" class="primary">📷 Kamera ekranını aç</button>
  </div>
  <div class="hint">Eşleşme için ücretsiz ve açık kaynak ntfy.sh kullanılır (adres Ayarlar'dan değiştirilebilir); fotoğraflar o sunucudan geçmez, iki cihaz arasında doğrudan (WebRTC) aktarılır. Kod yalnızca bu eşleşmeye özeldir; bağlantıyı kestiğinizde geçersiz olur.</div>
@@ -1682,8 +1684,16 @@ function phJoin(token){
   setTimeout(hello,300);ph.hello=setInterval(hello,2500);
   phSaveLs();refreshState();return true;
 }
-function phStop(keep){
-  clearInterval(ph.hello);clearTimeout(ph.iceT);closePc();
+function phStop(keep,quiet){
+  clearInterval(ph.hello);clearTimeout(ph.iceT);
+  if(!keep&&!quiet&&ph.dc&&ph.dc.readyState==='open'){
+    // karşı tarafa "bağlantıyı bitirdim" haberi ver, sonra kapat
+    const dc=ph.dc,pc=ph.pc;try{dc.send('{"t":"bye"}')}catch(e){}
+    dc.onclose=null;dc.onmessage=null;ph.dc=null;ph.pc=null;ph.rx=null;
+    if(pc)pc.onconnectionstatechange=null;
+    setTimeout(()=>{try{dc.close()}catch(e){}try{pc&&pc.close()}catch(e){}},400);
+  }
+  closePc();
   if(ph.sig)ph.sig.close();
   Object.assign(ph,{role:null,token:'',sig:null,peer:'',state:'idle',iceBuf:[],pend:[],sigOk:null});
   if(!keep){try{localStorage.removeItem(PHLS)}catch(e){}ph.outq=[];pvCamStop()}
@@ -1741,7 +1751,7 @@ function setupDc(dc){
   ph.dc=dc;dc.binaryType='arraybuffer';
   dc.onopen=()=>{if(dc!==ph.dc)return;dcSend(ph.role==='guest'?{t:'info',name:deviceName()}:{t:'ok'});refreshState();flushOut()};
   dc.onclose=()=>{if(dc===ph.dc)refreshState()};
-  dc.onmessage=e=>dcMsg(e.data);
+  dc.onmessage=e=>{if(dc===ph.dc)dcMsg(e.data)};
 }
 function dcMsg(d){
   if(typeof d!=='string'){const r=ph.rx;if(!r)return;r.chunks.push(d);r.got+=d.byteLength;if(r.got>r.size)ph.rx=null;return}
@@ -1755,7 +1765,10 @@ function dcMsg(d){
     else dcSend({t:'nack',id:r.id});
   }else if(m.t==='ack'&&ph.role==='guest')pvMark(m.id,'ack');
   else if(m.t==='nack'&&ph.role==='guest')pvMark(m.id,'nack');
-  else if(m.t==='info'&&ph.role==='host'){ph.peerName=String(m.name||'Telefon').slice(0,40);updatePhoneUI()}
+  else if(m.t==='bye'){
+    if(ph.role==='guest'){phStop(false,true);toast('Bilgisayar bağlantıyı sonlandırdı; yeni QR/kod gerekir',4000)}
+    else{closePc();ph.peerName='';refreshState();toast('Telefon ayrıldı; yeni telefon için QR hâlâ geçerli',3500)}
+  }else if(m.t==='info'&&ph.role==='host'){ph.peerName=String(m.name||'Telefon').slice(0,40);updatePhoneUI()}
 }
 function refreshState(){
   if(ph.pc&&['failed','closed'].includes(ph.pc.connectionState))closePc();
@@ -1855,6 +1868,7 @@ function updatePhoneUI(){
   b.classList.toggle('on',ph.state==='connected');
   b.textContent=ph.state==='connected'?'📱 ●':ph.role?'📱 …':'📱 Telefon';
   const m=$('#phoneModal');m.dataset.role=ph.role||'idle';m.classList.toggle('conn',ph.state==='connected');
+  if(ph.role==='guest')$('#phGCode').textContent=ph.token.replace(/(.{4})/g,'$1-').replace(/-$/,'');
   $('#phStatus').textContent=phStateText();$('#pvState').textContent=phStateText();
   document.querySelectorAll('input[name=phMode]').forEach(r=>r.checked=r.value===S.phoneMode);
   $('#phList').innerHTML=ph.list.map(i=>'<img src="'+i.url+'">').join('');
@@ -1890,7 +1904,9 @@ for(const id of ['pvFile','pvCam'])$('#'+id).onchange=e=>{[...e.target.files].fo
 // Windows/Chromium: PDF'e sağ tık > Birlikte aç ile gelen dosyalar
 if('launchQueue' in window){
   launchQueue.setConsumer(async p=>{
-    if(!p||!p.files||!p.files.length)return;
+    if(!p)return;
+    try{const mm=p.targetURL&&String(p.targetURL).match(/[?&]pair=([a-z0-9]+)/i);if(mm&&phJoin(mm[1]))pvOpen()}catch(e){}
+    if(!p.files||!p.files.length)return;
     const fs=[];for(const h of p.files){try{fs.push(await h.getFile())}catch(e){}}
     if(fs.length)openFiles(fs);
   });
