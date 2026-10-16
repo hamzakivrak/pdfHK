@@ -92,6 +92,18 @@ kbd{background:var(--panel);border:1px solid var(--line);border-radius:4px;paddi
 #ocrStatus.err{color:var(--danger)}
 #ocrStatus.spin::before{content:"";display:inline-block;width:11px;height:11px;margin-right:6px;border:2px solid var(--accent);border-right-color:transparent;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px}
 @keyframes sp{to{transform:rotate(360deg)}}
+#tblPrev{display:none;overflow:auto;border:1px solid var(--line);border-radius:6px;background:#fff;color:#000;flex:1;min-height:160px}
+#results.istbl #tblPrev{display:block}
+#results.istbl.raw #tblPrev{display:none}
+#results.istbl:not(.raw) #resText{display:none}
+#tblPrev table{border-collapse:collapse;font-family:'Times New Roman',Times,serif;font-size:11pt;width:max-content;min-width:100%}
+#tblPrev td{border:1px solid #9aa0a6;padding:3px 6px;min-width:44px;vertical-align:top;outline:none}
+#tblPrev td:focus{background:#fff8d6}
+#tblPrev tr:first-child td{font-weight:600;background:#eef1f4}
+#tblTools{display:none;gap:6px;flex-wrap:wrap;align-items:center}
+#results.istbl #tblTools{display:flex}
+#results .xl{display:none}#results.istbl .xl{display:inline-block}
+.selbar button.on,#tblTools button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 #resText{min-height:180px;flex:1;font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:1.5;text-align:justify;text-justify:inter-word;hyphens:auto}
 .btnrow{display:flex;gap:6px;flex-wrap:wrap}
 .hist{border:1px solid var(--line);border-radius:8px;max-height:150px;overflow:auto}
@@ -162,6 +174,7 @@ label.chk input{width:auto}
  <button id="btnModeText" class="on" title="Metin seç (T)">🔤 Metin</button>
  <button id="btnModeOcr" title="Bölge seç ve OCR (S)">✂️ Bölge OCR</button>
  <button id="btnPageOcr" title="Tüm sayfanın metni">📄 Sayfa</button>
+ <button id="btnTable" title="Tablo modu: seçilen bölge tablo olarak çıkar (Excel/Word'e tablo olarak yapışır)">▦ Tablo</button>
  <span class="sep"></span>
  <button id="btnSearch" title="Ara (Ctrl+F)">🔍</button>
  <button id="btnNight" title="Gece modu (sayfaları karart)">🌙</button>
@@ -194,9 +207,12 @@ label.chk input{width:auto}
   <header><span>📋 Çıkarılan metin</span><button id="btnCloseRes">✕</button></header>
   <div class="body">
    <div id="ocrStatus"></div>
+   <div id="tblTools"><button id="viewTbl" class="on">▦ Tablo görünümü</button><button id="viewRaw">Ham metin</button><span class="hint" style="font-size:11px">Hücrelere tıklayıp düzeltebilirsiniz</span></div>
+   <div id="tblPrev"></div>
    <textarea id="resText" placeholder="OCR veya seçilen metin burada görünür. Düzenleyebilirsiniz."></textarea>
    <div class="btnrow">
     <button id="btnCopy" class="primary">Kopyala</button>
+    <button id="btnXlsx" class="xl" title="Excel dosyası olarak indir">.xlsx indir</button>
     <button id="btnSave">.txt indir</button>
     <button id="btnDoc" title="Times New Roman 12 punto, iki yana yaslı; Word'de açılır">.doc indir</button>
     <button id="btnClearRes" class="danger">Temizle</button>
@@ -294,7 +310,7 @@ const PDFJS_WORKER_CDN='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/p
 const TESS_CDN='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
 
 /* ---------- Ayarlar ---------- */
-const DEF={geminiKeys:'',groqKeys:'',geminiModel:'gemini-2.5-flash',groqModel:'qwen/qwen3.8-27b',order:'gemini,groq,tesseract',tessLang:'tur+eng',tessLocal:'',preferEmbedded:true,autoCopy:true,night:false,dark:false,append:false,fontFamily:'Times New Roman',fontSize:12,justify:true,lineSpacing:1.5,joinMode:'first',joinKeep:1,autoRe:false,
+const DEF={geminiKeys:'',groqKeys:'',geminiModel:'gemini-2.5-flash',groqModel:'qwen/qwen3.8-27b',order:'gemini,groq,tesseract',tessLang:'tur+eng',tessLocal:'',preferEmbedded:true,autoCopy:true,night:false,dark:false,append:false,fontFamily:'Times New Roman',fontSize:12,justify:true,lineSpacing:1.5,joinMode:'first',joinKeep:1,autoRe:false,tableMode:false,
 prompt:'Bu görseldeki metni olduğu gibi, satır yapısını ve yazım düzenini koruyarak yaz. Yorum, açıklama veya başlık ekleme; yalnızca görseldeki metni ver. Tablo varsa satırları koru, hücreleri sekme ile ayır. Görselde metin yoksa boş yanıt ver.'};
 let S=Object.assign({},DEF);
 try{Object.assign(S,JSON.parse(localStorage.getItem(LS)||'{}'))}catch(e){}
@@ -569,7 +585,7 @@ function placeSel(){
   const w=sel.tab.wraps[sel.i],el=document.createElement('div');
   el.className='selbox fixed';
   el.innerHTML=['nw','n','ne','e','se','s','sw','w'].map(h=>'<i class="hd" data-h="'+h+'"></i>').join('')+
-    '<div class="selbar"><button class="primary" data-a="re" title="Bu alandan metni yeniden çıkar (Enter)">↻ Yeniden çıkar</button><button data-a="x" title="Seçimi kaldır (Esc)">✕</button></div>';
+    '<div class="selbar"><button class="primary" data-a="re" title="Bu alandan metni yeniden çıkar (Enter)">↻ Yeniden çıkar</button><button data-a="tb" title="Tablo modu: bu alanı tablo olarak çıkar">▦ Tablo</button><button data-a="x" title="Seçimi kaldır (Esc)">✕</button></div>';
   w.append(el);sel.el=el;
   el.addEventListener('pointerdown',e=>{
     if(e.target.closest('.selbar')){e.stopPropagation();return}
@@ -578,9 +594,9 @@ function placeSel(){
   });
   el.querySelector('.selbar').addEventListener('click',e=>{
     const b=e.target.closest('button');if(!b)return;
-    if(b.dataset.a==='re')reOcr();else clearSel();
+    if(b.dataset.a==='re')reOcr();else if(b.dataset.a==='tb'){setTableMode(!S.tableMode);reOcr()}else clearSel();
   });
-  positionSel();
+  syncTb();positionSel();
 }
 function positionSel(){
   const s=sel;if(!s||!s.el)return;
@@ -635,7 +651,7 @@ async function renderCrop(tab,i,rect){
   await page.render({canvasContext:ctx,viewport:vp}).promise;
   return c;
 }
-async function embeddedText(tab,i,rect){
+async function embeddedItems(tab,i,rect){
   const page=tab.pages[i],vp=pageVp(tab,i);
   const tc=await page.getTextContent(),items=[];
   for(const it of tc.items){
@@ -643,8 +659,12 @@ async function embeddedText(tab,i,rect){
     const t=pdfjsLib.Util.transform(vp.transform,it.transform),h=Math.hypot(t[2],t[3])||10,x=t[4],y=t[5],w=(it.width||0)*tab.scale;
     const cx=x+w/2,cy=y-h/2;
     if(rect&&(cx<rect.x||cx>rect.x+rect.w||cy<rect.y||cy>rect.y+rect.h))continue;
-    items.push({s:it.str,x,y,h});
+    items.push({s:it.str,x,y,h,w});
   }
+  return items;
+}
+async function embeddedText(tab,i,rect){
+  const items=await embeddedItems(tab,i,rect);
   if(!items.length)return'';
   items.sort((a,b)=>a.y-b.y||a.x-b.x);
   const lines=[];
@@ -656,7 +676,7 @@ async function embeddedText(tab,i,rect){
 const ks={};
 const KS=(p,k)=>ks[p+'|'+k]||(ks[p+'|'+k]={st:'ok',until:0});
 const cursor={gemini:0,groq:0};
-let curCanvas=null;
+let curCanvas=null,curPrompt=null;
 function smallB64(){
   // Groq istek başına görsel boyutunu sınırlar (~4MB base64); gerekirse küçült
   const c=curCanvas,m=Math.max(c.width,c.height),k=Math.min(1,2000/m);
@@ -677,7 +697,7 @@ function classify(e){
 async function callGemini(key,b64,mime){
   const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(S.geminiModel)+':generateContent',{
     method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},
-    body:JSON.stringify({contents:[{parts:[{text:S.prompt},{inline_data:{mime_type:mime,data:b64}}]}],generationConfig:{temperature:0}})});
+    body:JSON.stringify({contents:[{parts:[{text:curPrompt||S.prompt},{inline_data:{mime_type:mime,data:b64}}]}],generationConfig:{temperature:0}})});
   const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch(e){}
   if(!r.ok)throw apiErr(r.status,j.error&&j.error.message,raw.slice(0,900));
   const parts=(j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts)||[];
@@ -688,7 +708,7 @@ async function callGemini(key,b64,mime){
 async function callGroq(key,b64,mime){
   const r=await fetch('https://api.groq.com/openai/v1/chat/completions',{
     method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-    body:JSON.stringify({model:S.groqModel,temperature:0,messages:[{role:'user',content:[{type:'text',text:S.prompt},{type:'image_url',image_url:{url:'data:'+mime+';base64,'+b64}}]}]})});
+    body:JSON.stringify({model:S.groqModel,temperature:0,messages:[{role:'user',content:[{type:'text',text:curPrompt||S.prompt},{type:'image_url',image_url:{url:'data:'+mime+';base64,'+b64}}]}]})});
   const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch(e){}
   if(!r.ok)throw apiErr(r.status,(j.error&&(j.error.message||j.error))||raw.slice(0,200),raw.slice(0,900));
   return(j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content)||'';
@@ -719,7 +739,7 @@ async function tryProvider(name,b64,mime,notes){
   return null;
 }
 let tessWorker=null,tessKey='';
-async function tessOcr(canvas){
+async function tessOcr(canvas,full){
   const base=S.tessLocal?S.tessLocal.replace(/\/?$/,'/'):'';
   const list=[];if(base)list.push(base+'tesseract.min.js');list.push('lib/tesseract.min.js',TESS_CDN);
   setOcrStatus('Tesseract hazırlanıyor…',true);
@@ -732,25 +752,172 @@ async function tessOcr(canvas){
     tessWorker=await Tesseract.createWorker(S.tessLang||'eng',1,opts);tessKey=key;
   }
   const r=await tessWorker.recognize(canvas);
-  return r.data.text||'';
+  return full?r.data:(r.data.text||'');
 }
-async function runOcr(canvas,force){
-  curCanvas=canvas;
+async function runOcr(canvas,force,asTable){
+  curCanvas=canvas;curPrompt=asTable?TABLE_PROMPT:null;
   let order=force?[force]:S.order.split(',');
   if(!force&&!order.includes('groq')&&keysOf('groq').length){const t=order.indexOf('tesseract');if(t<0)order.push('groq');else order.splice(t,0,'groq')}
   const mime='image/jpeg',b64=canvas.toDataURL(mime,0.92).split(',')[1];
   const notes=[];
   for(const eng of order){
     if(eng==='tesseract'){
-      try{const t=await tessOcr(canvas);return{text:t.trim(),engine:LABEL.tesseract,notes}}
+      try{
+        if(asTable){const d=await tessOcr(canvas,true);return{text:(d.text||'').trim(),rows:buildTable(tessItems(d)),engine:LABEL.tesseract,notes}}
+        const t=await tessOcr(canvas);return{text:t.trim(),engine:LABEL.tesseract,notes}}
       catch(e){notes.push('Tesseract: '+(e.message||'hata'));continue}
     }
     if(!navigator.onLine){notes.push(LABEL[eng]+': internet yok, atlandı');continue}
     const t=await tryProvider(eng,b64,mime,notes);
-    if(t!=null)return{text:t.trim(),engine:LABEL[eng],notes};
+    if(t!=null)return{text:t.trim(),rows:asTable?parseTableText(t):null,engine:LABEL[eng],notes};
   }
   throw new Error('Hiçbir motor sonuç veremedi. '+notes.join(' | '));
 }
+
+/* ---------- Tablo çıkarma ---------- */
+let resIsTable=false;
+const TABLE_PROMPT='Bu görseldeki tabloyu Markdown tablo olarak ver: her satır | ile başlayıp | ile bitsin, hücreler | ile ayrılsın; ilk satır başlık satırı olsun ve hemen ardından |---|---| ayraç satırı gelsin. Hücre içindeki satır sonlarını boşlukla birleştir. Birleştirilmiş hücrelerde değeri ilgili hücrelere yaz ya da boş bırak. Metni ve sayıları görselde yazdığı gibi aynen koru. Yorum, açıklama veya kod bloğu ekleme. Görselde tablo yoksa metni düz yaz.';
+const cleanCell=s=>String(s==null?'':s).replace(/<br\s*\/?>/gi,' ').replace(/[\t\r\n]+/g,' ').replace(/\s{2,}/g,' ').trim();
+const rowsToTsv=rows=>rows.map(r=>r.map(cleanCell).join('\t')).join('\n');
+function tsvToRows(t){
+  const rows=t.split('\n').filter(l=>l.trim()).map(l=>l.split('\t').map(cleanCell));
+  const n=Math.max(1,...rows.map(r=>r.length));rows.forEach(r=>{while(r.length<n)r.push('')});return rows;
+}
+function parseTableText(t){
+  t=(t||'').replace(/```[a-z]*\n?/gi,'');
+  const L=t.split('\n').map(x=>x.trim()).filter(Boolean),piped=L.filter(l=>l.includes('|'));
+  let rows=null;
+  if(piped.length>=2&&piped.length>=L.length*0.6){
+    rows=piped.map(l=>l.replace(/^\|/,'').replace(/\|$/,'').split(/(?<!\\)\|/).map(c=>cleanCell(c.replace(/\\\|/g,'|'))))
+      .filter(r=>!r.every(c=>/^:?-{2,}:?$/.test(c)));
+  }else if(L.filter(l=>l.includes('\t')).length>=2&&L.filter(l=>l.includes('\t')).length>=L.length*0.6){
+    rows=L.map(l=>l.split('\t').map(cleanCell));
+  }
+  if(!rows)return null;
+  rows=rows.filter(r=>r.some(Boolean));
+  const n=Math.max(0,...rows.map(r=>r.length));
+  if(rows.length<2||n<2)return null;
+  rows.forEach(r=>{while(r.length<n)r.push('')});return rows;
+}
+/* Konum bilgisi olan kelime/metin parçalarından (gömülü metin veya Tesseract) satır-sütun çıkarır.
+   items: {s,x0,x1,cy,h}  → 2 boyutlu dizi ya da tablo gibi görünmüyorsa null */
+function buildTable(items){
+  items=(items||[]).filter(i=>i.s&&i.s.trim());
+  if(items.length<4)return null;
+  const hs=items.map(i=>i.h).sort((a,b)=>a-b),mh=hs[hs.length>>1]||10;
+  items.sort((a,b)=>a.cy-b.cy);
+  const rows=[];
+  for(const it of items){const R=rows[rows.length-1];
+    if(R&&Math.abs(it.cy-R.cy)<mh*0.6){R.it.push(it);R.cy+=(it.cy-R.cy)/R.it.length}else rows.push({cy:it.cy,it:[it]})}
+  if(rows.length<2)return null;
+  let minX=1e9,maxX=-1e9;for(const it of items){minX=Math.min(minX,it.x0);maxX=Math.max(maxX,it.x1)}
+  const TW=Math.max(1,maxX-minX);
+  for(const R of rows){
+    R.it.sort((a,b)=>a.x0-b.x0);R.cells=[];
+    for(const it of R.it){const c=R.cells[R.cells.length-1];
+      if(c&&it.x0-c.x1<mh*0.8){c.s+=' '+it.s.trim();c.x1=Math.max(c.x1,it.x1)}else R.cells.push({s:it.s.trim(),x0:it.x0,x1:it.x1})}
+    R.span=rows.length>2&&R.cells.length===1&&(R.cells[0].x1-R.cells[0].x0)>TW*0.6;
+  }
+  const all=rows.filter(r=>!r.span),body=all.length>=4?all.slice(1):all,W=Math.ceil(TW)+2,cov=new Int32Array(W+2),thr=Math.floor(body.length*0.15);
+  for(const R of body)for(const c of R.cells){const a=Math.max(0,Math.floor(c.x0-minX)),b=Math.min(W,Math.ceil(c.x1-minX));for(let x=a;x<=b;x++)cov[x]++}
+  const cols=[],g=Math.max(2,mh*0.3);let st=-1,last=-1,gap=0;
+  for(let x=0;x<=W;x++){
+    if(cov[x]>thr){if(st<0)st=x;last=x;gap=0}
+    else if(st>=0&&++gap>=g){cols.push([st+minX,last+minX]);st=-1;gap=0}
+  }
+  if(st>=0)cols.push([st+minX,last+minX]);
+  if(cols.length<2)return null;
+  const colOf=c=>{const m=(c.x0+c.x1)/2;let best=0,bd=1e9;cols.forEach((C,i)=>{const d=m<C[0]?C[0]-m:m>C[1]?m-C[1]:0;if(d<bd){bd=d;best=i}});return best};
+  const out=[];
+  for(const R of rows){
+    const r=new Array(cols.length).fill('');
+    if(R.span)r[0]=R.cells[0].s;else for(const c of R.cells){const k=colOf(c);r[k]=r[k]?r[k]+' '+c.s:c.s}
+    const o={r,cy:R.cy,span:R.span},p=out[out.length-1];
+    if(p&&!o.span&&!p.span&&!r[0]&&r.filter(Boolean).length<p.r.filter(Boolean).length&&(o.cy-p.cy)<mh*1.9){
+      r.forEach((v,i)=>{if(v)p.r[i]=p.r[i]?p.r[i]+' '+v:v});p.cy=o.cy;
+    }else out.push(o);
+  }
+  const res=out.map(o=>o.r);
+  if(res.length<2||res.filter(r=>r.filter(Boolean).length>=2).length<res.length*0.5)return null;
+  return res;
+}
+function tessItems(d){
+  let w=[];
+  if(d.words&&d.words.length)w=d.words.map(o=>({s:o.text,x0:o.bbox.x0,x1:o.bbox.x1,cy:(o.bbox.y0+o.bbox.y1)/2,h:o.bbox.y1-o.bbox.y0}));
+  else if(d.tsv)w=d.tsv.split('\n').map(l=>l.split('\t')).filter(a=>a.length>=12&&a[0]==='5'&&a[11]&&a[11].trim()).map(a=>({s:a[11],x0:+a[6],x1:+a[6]+ +a[8],cy:+a[7]+ +a[9]/2,h:+a[9]}));
+  return w.filter(o=>o.s&&o.s.trim()&&!/^([|_=~\[\]\\\/]+|[-—–_]{2,})$/.test(o.s.trim()));
+}
+const tdSt=()=>'border:1px solid #000;padding:2pt 5pt;vertical-align:top;text-align:left;'+fontCss();
+const tableHtml=rows=>'<table style="border-collapse:collapse;border:1px solid #000">'+rows.map(r=>'<tr>'+r.map(c=>'<td style="'+tdSt()+'">'+(escH(c)||'&nbsp;')+'</td>').join('')+'</tr>').join('')+'</table>';
+async function copyTable(rows){
+  try{
+    if(window.ClipboardItem&&navigator.clipboard&&navigator.clipboard.write){
+      await navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([tableHtml(rows)],{type:'text/html'}),'text/plain':new Blob([rowsToTsv(rows)],{type:'text/plain'})})]);
+      return true;
+    }
+  }catch(e){}
+  return copyText(rowsToTsv(rows));
+}
+/* Basit .xlsx yazıcı (kütüphanesiz, sıkıştırmasız zip) */
+const crcT=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+function crc32(b){let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=crcT[(c^b[i])&255]^(c>>>8);return(c^0xFFFFFFFF)>>>0}
+function zipStore(files){
+  const enc=new TextEncoder(),parts=[],cen=[];let off=0,cdLen=0;
+  const u16=v=>[v&255,(v>>>8)&255],u32=v=>[v&255,(v>>>8)&255,(v>>>16)&255,(v>>>24)&255];
+  for(const f of files){
+    const nm=enc.encode(f.name),d=enc.encode(f.data),crc=crc32(d),sz=d.length;
+    const lh=new Uint8Array([0x50,0x4b,3,4,...u16(20),...u16(0x0800),...u16(0),...u16(0),...u16(0x21),...u32(crc),...u32(sz),...u32(sz),...u16(nm.length),...u16(0)]);
+    parts.push(lh,nm,d);
+    const ch=new Uint8Array([0x50,0x4b,1,2,...u16(20),...u16(20),...u16(0x0800),...u16(0),...u16(0),...u16(0x21),...u32(crc),...u32(sz),...u32(sz),...u16(nm.length),...u16(0),...u16(0),...u16(0),...u16(0),...u32(0),...u32(off)]);
+    cen.push(ch,nm);cdLen+=ch.length+nm.length;off+=lh.length+nm.length+sz;
+  }
+  const end=new Uint8Array([0x50,0x4b,5,6,...u16(0),...u16(0),...u16(files.length),...u16(files.length),...u32(cdLen),...u32(off),...u16(0)]);
+  return new Blob([...parts,...cen,end],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+function colName(i){let s='';i++;while(i>0){const m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=(i-m-1)/26}return s}
+function numVal(c){
+  const t=c.replace(/\s/g,'');
+  if(!t||t.replace(/\D/g,'').length>15)return null;
+  if(/^-?(0|[1-9]\d*)$/.test(t))return t;
+  if(/^-?(0|[1-9]\d*),\d+$/.test(t))return t.replace(',','.');
+  if(/^-?[1-9]\d{0,2}(\.\d{3})+(,\d+)?$/.test(t))return t.replace(/\./g,'').replace(',','.');
+  if(/^-?(0|[1-9]\d*)\.\d{1,2}$/.test(t))return t;
+  return null;
+}
+function xlsxBlob(rows){
+  const esc=x=>x.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'');
+  const nc=rows[0].length,w=new Array(nc).fill(8);
+  rows.forEach(r=>r.forEach((c,i)=>{w[i]=Math.max(w[i],Math.min(60,c.length+2))}));
+  const sd=rows.map((r,ri)=>'<row r="'+(ri+1)+'">'+r.map((c,ci)=>{
+    if(c==='')return'';const ref=colName(ci)+(ri+1),n=numVal(c);
+    return n!==null?'<c r="'+ref+'"><v>'+n+'</v></c>':'<c r="'+ref+'" t="inlineStr"><is><t xml:space="preserve">'+esc(c)+'</t></is></c>';
+  }).join('')+'</row>').join('');
+  const H='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  return zipStore([
+    {name:'[Content_Types].xml',data:H+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>'},
+    {name:'_rels/.rels',data:H+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'},
+    {name:'xl/workbook.xml',data:H+'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Tablo" sheetId="1" r:id="rId1"/></sheets></workbook>'},
+    {name:'xl/_rels/workbook.xml.rels',data:H+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>'},
+    {name:'xl/worksheets/sheet1.xml',data:H+'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols>'+w.map((x,i)=>'<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+x+'" customWidth="1"/>').join('')+'</cols><sheetData>'+sd+'</sheetData></worksheet>'}
+  ]);
+}
+function downloadXlsx(rows){
+  const a=document.createElement('a');a.href=URL.createObjectURL(xlsxBlob(rows));
+  a.download='tablo-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+function renderTbl(){
+  $('#results').classList.toggle('istbl',resIsTable);
+  const box=$('#tblPrev');box.innerHTML='';
+  if(!resIsTable)return;
+  const tb=document.createElement('table');
+  tsvToRows($('#resText').value).forEach(r=>{const tr=tb.insertRow();r.forEach(c=>{const td=tr.insertCell();td.textContent=c;td.contentEditable='true'})});
+  box.append(tb);
+}
+function syncTb(){
+  const b=$('#btnTable');if(b)b.classList.toggle('on',!!S.tableMode);
+  if(sel&&sel.el){const x=sel.el.querySelector('[data-a=tb]');if(x)x.classList.toggle('on',!!S.tableMode)}
+}
+function setTableMode(v){S.tableMode=!!v;save();syncTb()}
 
 /* ---------- OCR akışı ve sonuç paneli ---------- */
 function setOcrStatus(m,spin,err){const e=$('#ocrStatus');e.textContent=m;e.className=(spin?'spin ':'')+(err?'err':'')}
@@ -815,17 +982,20 @@ async function copyRich(text){
   return copyText(text);
 }
 function downloadDoc(text){
-  const html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>OCR</title><style>@page WordSection1{size:21cm 29.7cm;margin:2.5cm}div.WordSection1{page:WordSection1}</style></head><body><div class="WordSection1">'+parasHtml(text)+'</div></body></html>';
+  const html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>OCR</title><style>@page WordSection1{size:21cm 29.7cm;margin:2.5cm}div.WordSection1{page:WordSection1}</style></head><body><div class="WordSection1">'+(resIsTable?tableHtml(tsvToRows(text)):parasHtml(text))+'</div></body></html>';
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿',html],{type:'application/msword;charset=utf-8'}));
   a.download='ocr-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.doc';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
 }
 const resHist=[];
-function pushResult(text,meta,noJoin){
-  if(S.join!==false&&!noJoin)text=joinParas(text);
+function pushResult(text,meta,noJoin,isTable){
+  if(!isTable&&S.join!==false&&!noJoin)text=joinParas(text);
   openResults();
-  const ta=$('#resText');
-  if($('#optAppend').checked&&ta.value.trim())ta.value+='\n\n'+text;else ta.value=text;
-  resHist.unshift({text,meta,time:new Date()});if(resHist.length>40)resHist.pop();
+  const ta=$('#resText'),app=$('#optAppend').checked&&ta.value.trim();
+  if(app&&isTable&&resIsTable)ta.value+='\n'+text;
+  else if(app){ta.value+='\n\n'+text;isTable=false}
+  else ta.value=text;
+  resIsTable=!!isTable;renderTbl();
+  resHist.unshift({text,meta,time:new Date(),table:!!isTable});if(resHist.length>40)resHist.pop();
   renderHist();
 }
 function renderHist(){
@@ -836,25 +1006,38 @@ function renderHist(){
     const first=it.text.replace(/\s+/g,' ').slice(0,60)||'(boş)';
     d.textContent=first;const s=document.createElement('small');
     s.textContent=it.time.toLocaleTimeString('tr-TR')+' · '+it.meta;d.append(s);
-    d.onclick=()=>{$('#resText').value=it.text};h.append(d);
+    d.onclick=()=>{$('#resText').value=it.text;resIsTable=!!it.table;renderTbl()};h.append(d);
   });
 }
 async function doOcr(tab,i,rect,force,skipEmb){
   if(busy){toast('Devam eden bir işlem var…');return}
-  busy=true;openResults();lastCrop={tab,i,rect};
+  busy=true;openResults();lastCrop={tab,i,rect};const asTable=!!S.tableMode;
   const where=tab.name.replace(/\.pdf$/i,'').slice(0,24)+' s.'+(i+1);
   try{
     if(S.preferEmbedded&&!force&&!skipEmb){
       setOcrStatus('PDF içindeki metin okunuyor…',true);
-      const t=await embeddedText(tab,i,rect);
-      if(t.trim()){finish(t,'Gömülü PDF metni',where);return}
+      if(asTable){
+        const rows=buildTable((await embeddedItems(tab,i,rect)).map(o=>({s:o.s,x0:o.x,x1:o.x+o.w,cy:o.y-o.h/2,h:o.h})));
+        if(rows){finishTable(rows,'Gömülü PDF metni · tablo',where);return}
+      }else{
+        const t=await embeddedText(tab,i,rect);
+        if(t.trim()){finish(t,'Gömülü PDF metni',where);return}
+      }
     }
     setOcrStatus('Görüntü hazırlanıyor…',true);
     const canvas=await renderCrop(tab,i,rect);
-    const r=await runOcr(canvas,force);
-    finish(r.text||'(metin bulunamadı)',r.engine,where,r.notes);
+    const r=await runOcr(canvas,force,asTable);
+    if(asTable&&r.rows){finishTable(r.rows,r.engine+' · tablo',where,r.notes);return}
+    finish(r.text||'(metin bulunamadı)',r.engine+(asTable?' · tablo algılanamadı':''),where,r.notes);
   }catch(e){setOcrStatus('Hata: '+(e.message||e),false,true)}
   finally{busy=false;if($('#modal').classList.contains('show'))renderKeyStatus()}
+}
+async function finishTable(rows,engine,where,notes){
+  pushResult(rowsToTsv(rows),engine+' · '+where,true,true);
+  let msg='Tamam · '+engine+' · '+rows.length+' satır × '+rows[0].length+' sütun';
+  if(notes&&notes.length)msg+=' (atlanan: '+notes.join('; ')+')';
+  if(S.autoCopy){const ok=await copyTable(rows);if(ok)msg+=' · tablo olarak panoya kopyalandı'}
+  setOcrStatus(msg);
 }
 async function finish(text,engine,where,notes){
   pushResult(text,engine+' · '+where);
@@ -941,6 +1124,17 @@ $('#btnFitP').onclick=()=>active&&fitPage(active);
 $('#btnRot').onclick=()=>{if(!active)return;clearSel();active.rot=(active.rot+90)%360;layout(active)};
 $('#btnModeText').onclick=()=>setMode('text');
 $('#btnModeOcr').onclick=()=>setMode(mode==='ocr'?'text':'ocr');
+$('#btnTable').onclick=()=>{
+  setTableMode(!S.tableMode);
+  toast(S.tableMode?'Tablo modu açık: seçtiğiniz bölge tablo olarak çıkar':'Tablo modu kapalı');
+  if(sel&&sel.el&&!busy)reOcr();
+};
+$('#viewTbl').onclick=()=>{$('#results').classList.remove('raw');$('#viewTbl').classList.add('on');$('#viewRaw').classList.remove('on');renderTbl()};
+$('#viewRaw').onclick=()=>{$('#results').classList.add('raw');$('#viewRaw').classList.add('on');$('#viewTbl').classList.remove('on')};
+$('#tblPrev').addEventListener('input',()=>{const tb=$('#tblPrev table');if(tb)$('#resText').value=[...tb.rows].map(tr=>[...tr.cells].map(td=>cleanCell(td.textContent)).join('\t')).join('\n')});
+$('#tblPrev').addEventListener('keydown',e=>{if(e.key==='Enter')e.preventDefault();e.stopPropagation()});
+$('#tblPrev').addEventListener('paste',e=>{e.preventDefault();const t=(e.clipboardData||window.clipboardData).getData('text/plain').replace(/[\r\n\t]+/g,' ');document.execCommand('insertText',false,t)});
+syncTb();
 $('#btnPageOcr').onclick=()=>{if(!active)return toast('Önce bir PDF açın');doOcr(active,active.cur-1,null)};
 $('#btnSearch').onclick=()=>{const s=$('#searchbar');s.classList.toggle('show');if(s.classList.contains('show')){$('#q').value=active?active.query||'':'';$('#q').focus()}};
 $('#btnDoSearch').onclick=doSearch;
@@ -951,17 +1145,18 @@ $('#btnNight').onclick=()=>{S.night=!S.night;save();applyTheme()};
 $('#btnTheme').onclick=()=>{S.dark=!S.dark;save();applyTheme()};
 $('#btnResults').onclick=()=>$('#results').classList.toggle('show');
 $('#btnCloseRes').onclick=()=>$('#results').classList.remove('show');
-$('#btnCopy').onclick=async()=>{const t=$('#resText').value;if(!t.trim())return toast('Kopyalanacak metin yok');toast(await copyRich(t)?'Kopyalandı':'Kopyalanamadı')};
+$('#btnCopy').onclick=async()=>{const t=$('#resText').value;if(!t.trim())return toast('Kopyalanacak metin yok');toast((resIsTable?await copyTable(tsvToRows(t)):await copyRich(t))?(resIsTable?'Tablo kopyalandı':'Kopyalandı'):'Kopyalanamadı')};
+$('#btnXlsx').onclick=()=>{const t=$('#resText').value;if(!resIsTable||!t.trim())return toast('Önce Tablo modunda bir bölge çıkarın');downloadXlsx(tsvToRows(t))};
 $('#btnDoc').onclick=()=>{const t=$('#resText').value;if(!t.trim())return toast('Kaydedilecek metin yok');downloadDoc(t)};
 $('#btnSave').onclick=()=>{
   const t=$('#resText').value;if(!t.trim())return toast('Kaydedilecek metin yok');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));
   a.download='ocr-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.txt';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
 };
-$('#btnClearRes').onclick=()=>{$('#resText').value='';setOcrStatus('')};
+$('#btnClearRes').onclick=()=>{$('#resText').value='';resIsTable=false;renderTbl();setOcrStatus('')};
 $('#optAppend').checked=!!S.append;$('#optAppend').onchange=e=>{S.append=e.target.checked;save()};
 $('#optJoin').checked=S.join!==false;$('#optJoin').onchange=e=>{S.join=e.target.checked;save()};
-$('#btnJoin').onclick=()=>{const ta=$('#resText');if(!ta.value.trim())return toast('Birleştirilecek metin yok');ta.value=joinParas(ta.value);toast('Paragraflar birleştirildi')};
+$('#btnJoin').onclick=()=>{const ta=$('#resText');if(resIsTable)return toast('Tablo sonucunda paragraf birleştirme uygulanmaz');if(!ta.value.trim())return toast('Birleştirilecek metin yok');ta.value=joinParas(ta.value);toast('Paragraflar birleştirildi')};
 $('#btnRetry').onclick=()=>{
   if(!lastCrop)return toast('Önce bir bölge seçin');
   if(!tabs.includes(lastCrop.tab))return toast('Bu sekme kapatılmış');
