@@ -117,10 +117,38 @@ label.chk input{width:auto}
 #selMenu.show{display:flex}
 #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(20px);background:#222;color:#fff;padding:8px 14px;border-radius:99px;opacity:0;pointer-events:none;transition:.2s;z-index:100;max-width:90vw;text-align:center}
 #toast.show{opacity:1;transform:translateX(-50%)}
-#modal,#printModal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:90;padding:10px}
-#modal.show,#printModal.show{display:flex}
-#modal .box,#printModal .box{background:var(--panel);border-radius:14px;width:min(640px,100%);max-height:92vh;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
-#modal h3,#printModal h3{margin:0}
+#modal,#printModal,#phoneModal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:90;padding:10px}
+#modal.show,#printModal.show,#phoneModal.show{display:flex}
+#modal .box,#printModal .box,#phoneModal .box{background:var(--panel);border-radius:14px;width:min(640px,100%);max-height:92vh;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+#modal h3,#printModal h3,#phoneModal h3{margin:0}
+#phoneModal .g,#phoneModal .h,#phoneModal .i{display:none}
+#phoneModal[data-role=host] .h,#phoneModal[data-role=guest] .g,#phoneModal[data-role=idle] .i{display:flex;flex-direction:column;gap:8px}
+#phoneModal .qrbox{display:flex;flex-direction:column;align-items:center;gap:6px}
+#phoneModal.conn .qrbox{display:none}
+#phQr{background:#fff;border-radius:8px;max-width:100%;image-rendering:pixelated}
+#phCode{font:600 20px/1.2 ui-monospace,Consolas,monospace;letter-spacing:2px;user-select:all}
+#phList{display:flex;gap:6px;flex-wrap:wrap}
+#phList img{height:56px;border-radius:6px;border:1px solid var(--line)}
+#btnPhone.on{background:#1e9e5a;color:#fff;border-color:#1e9e5a}
+#phoneView{position:fixed;inset:0;background:#000;color:#fff;z-index:95;display:none;flex-direction:column}
+#phoneView.show{display:flex}
+#phoneView .top{display:flex;align-items:center;gap:8px;padding:10px 12px;background:rgba(0,0,0,.6)}
+#phoneView .top b{flex:1}
+#phoneView button{background:#2a2e36;color:#fff;border:1px solid #444;border-radius:10px;padding:10px 14px;font-size:15px}
+#pvVideo{flex:1;min-height:0;width:100%;object-fit:contain;background:#111}
+#phoneView.nocam #pvVideo{display:none}
+#pvMsg{padding:8px 12px;font-size:13px;color:#ccc;min-height:20px}
+#pvStrip{display:flex;gap:6px;padding:6px 12px;overflow-x:auto;min-height:64px}
+#pvStrip div{position:relative;flex:none}
+#pvStrip img{height:56px;border-radius:6px;display:block}
+#pvStrip div::after{content:"⏳";position:absolute;right:2px;bottom:2px;font-size:13px;background:rgba(0,0,0,.65);border-radius:8px;padding:0 3px}
+#pvStrip div[data-st=sent]::after{content:"✓"}
+#pvStrip div[data-st=ack]::after{content:"✓✓";color:#7dffb0}
+#pvStrip div[data-st=nack]::after{content:"⚠"}
+#phoneView .bar{display:flex;align-items:center;justify-content:space-around;padding:12px 12px calc(14px + env(safe-area-inset-bottom))}
+#pvShot{width:76px;height:76px;border-radius:50%!important;background:#fff!important;border:5px solid #888!important;padding:0!important}
+#pvShot:active{transform:scale(.92)}
+#pvFlash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s}
 #modal .f{display:flex;flex-direction:column;gap:4px}
 #modal .f>span{font-size:12px;color:var(--muted)}
 .hint{font-size:12px;color:var(--muted)}
@@ -179,6 +207,7 @@ label.chk input{width:auto}
  <button id="btnSearch" title="Ara (Ctrl+F)">🔍</button>
  <button id="btnNight" title="Gece modu (sayfaları karart)">🌙</button>
  <button id="btnTheme" title="Arayüz teması">🎨</button>
+ <button id="btnPhone" title="Telefonla fotoğraf çek, bilgisayarda anında aç">📱 Telefon</button>
  <button id="btnResults" title="Metin paneli">📋</button>
  <button id="btnSettings" title="Ayarlar / API anahtarları">⚙️</button>
  <button id="btnInstall" class="primary" style="display:none" title="Uygulama olarak yükle">⬇️ Yükle</button>
@@ -259,6 +288,39 @@ label.chk input{width:auto}
 <div id="dropOv">PDF veya resim dosyalarını bırakın</div>
 <input type="file" id="file" accept="application/pdf,.pdf,image/jpeg,image/png,image/webp,image/bmp,image/gif,image/avif,.jpg,.jpeg,.jfif,.png,.webp,.bmp,.gif,.avif" multiple hidden>
 
+<div id="phoneModal" data-role="idle"><div class="box">
+ <h3>📱 Telefon ↔ Bilgisayar</h3>
+ <div class="hint" id="phStatus">Bağlı değil</div>
+ <div class="i">
+  <div>Telefonla çektiğiniz fotoğraflar bu bilgisayardaki uygulamaya anında düşer.</div>
+  <button id="phStart" class="primary">Bu bilgisayarı eşleştir (QR göster)</button>
+  <div class="f"><span>Telefondaysanız: bilgisayardaki kodu girin</span><div class="btnrow"><input type="text" id="phJoinCode" placeholder="abcd-efgh-ijkl" style="flex:1;min-width:160px" autocomplete="off" autocapitalize="off"><button id="phJoin">Bağlan</button></div></div>
+ </div>
+ <div class="h">
+  <div class="qrbox"><canvas id="phQr"></canvas><div>Telefonla QR'ı okutun (kamera uygulaması) ya da kodu girin:</div><div id="phCode"></div><div class="btnrow"><button id="phCopyLink">Bağlantıyı kopyala</button></div></div>
+  <div class="f"><span>Gelen fotoğraflar</span>
+   <label class="chk"><input type="radio" name="phMode" value="tabs"> Her fotoğraf ayrı sekmede açılsın</label>
+   <label class="chk"><input type="radio" name="phMode" value="pdf"> Tek PDF'e topla (çok sayfalı, tek sekme)</label>
+   <div class="btnrow"><button id="phNewSess" title="Sonraki fotoğraf yeni bir PDF sekmesi başlatır">＋ Yeni PDF oturumu başlat</button></div></div>
+  <div id="phList"></div>
+ </div>
+ <div class="g">
+  <div>Bu cihaz telefon olarak bağlı. Çektiğiniz fotoğraflar bilgisayara gönderilir.</div>
+  <button id="phOpenCam" class="primary">📷 Kamera ekranını aç</button>
+ </div>
+ <div class="hint">Eşleşme için ücretsiz ve açık kaynak ntfy.sh kullanılır (adres Ayarlar'dan değiştirilebilir); fotoğraflar o sunucudan geçmez, iki cihaz arasında doğrudan (WebRTC) aktarılır. Kod yalnızca bu eşleşmeye özeldir; bağlantıyı kestiğinizde geçersiz olur.</div>
+ <div class="btnrow" style="justify-content:flex-end"><button id="phStop" class="danger">Bağlantıyı kes</button><button id="phClose">Kapat</button></div>
+</div></div>
+<div id="phoneView">
+ <div class="top"><b>📱 Bilgisayara gönder</b><span id="pvState" style="font-size:13px">…</span><button id="pvClose">Kapat</button></div>
+ <video id="pvVideo" playsinline muted autoplay></video>
+ <div id="pvMsg"></div>
+ <div id="pvStrip"></div>
+ <div class="bar"><button id="pvGallery">🖼 Galeri</button><button id="pvShot" aria-label="Fotoğraf çek"></button><button id="pvFlip">🔄 Çevir</button><button id="pvNative">📷 Kamera uyg.</button></div>
+ <input type="file" id="pvFile" accept="image/*" multiple hidden>
+ <input type="file" id="pvCam" accept="image/*" capture="environment" hidden>
+ <div id="pvFlash"></div>
+</div>
 <div id="modal"><div class="box">
  <h3>⚙️ Ayarlar</h3>
  <div class="f"><span>Gemini API anahtarları (her satıra bir tane). Kota bitince sıradakine geçilir.</span><textarea id="sGeminiKeys" rows="3" placeholder="AIza…"></textarea></div>
@@ -275,6 +337,7 @@ label.chk input{width:auto}
    <option value="tesseract">Sadece Tesseract (çevrimdışı)</option>
    <option value="gemini,groq">Sadece Gemini → Groq</option>
   </select></div>
+ <div class="f"><span>Telefon eşleşme sunucusu (ntfy uyumlu; boşsa https://ntfy.sh)</span><input type="text" id="sSigUrl" placeholder="https://ntfy.sh"></div>
  <div class="f"><span>Tesseract dili (örn. tur+eng)</span><input type="text" id="sTessLang"></div>
  <div class="f"><span>Yerel Tesseract klasörü (isteğe bağlı, tam çevrimdışı için; örn. lib/tesseract/)</span><input type="text" id="sTessLocal" placeholder="boş bırakılırsa CDN kullanılır"></div>
  <div class="f"><span>OCR komutu (modele gönderilen)</span><textarea id="sPrompt" rows="3"></textarea></div>
@@ -310,7 +373,7 @@ const PDFJS_WORKER_CDN='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/p
 const TESS_CDN='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
 
 /* ---------- Ayarlar ---------- */
-const DEF={geminiKeys:'',groqKeys:'',geminiModel:'gemini-2.5-flash',groqModel:'qwen/qwen3.8-27b',order:'gemini,groq,tesseract',tessLang:'tur+eng',tessLocal:'',preferEmbedded:true,autoCopy:true,night:false,dark:false,append:false,fontFamily:'Times New Roman',fontSize:12,justify:true,lineSpacing:1.5,joinMode:'first',joinKeep:1,autoRe:false,tableMode:false,
+const DEF={geminiKeys:'',groqKeys:'',geminiModel:'gemini-2.5-flash',groqModel:'qwen/qwen3.8-27b',order:'gemini,groq,tesseract',tessLang:'tur+eng',tessLocal:'',preferEmbedded:true,autoCopy:true,night:false,dark:false,append:false,fontFamily:'Times New Roman',fontSize:12,justify:true,lineSpacing:1.5,joinMode:'first',joinKeep:1,autoRe:false,tableMode:false,phoneMode:'tabs',sigUrl:'',
 prompt:'Bu görseldeki metni olduğu gibi, satır yapısını ve yazım düzenini koruyarak yaz. Yorum, açıklama veya başlık ekleme; yalnızca görseldeki metni ver. Tablo varsa satırları koru, hücreleri sekme ile ayır. Görselde metin yoksa boş yanıt ver.'};
 let S=Object.assign({},DEF);
 try{Object.assign(S,JSON.parse(localStorage.getItem(LS)||'{}'))}catch(e){}
@@ -363,7 +426,7 @@ function savePos(tab){const p=readPos();p[tab.key]={page:tab.cur,scale:tab.scale
 const isPdf=f=>/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name);
 const isImg=f=>/^image\/(jpeg|png|webp|bmp|gif|avif)$/i.test(f.type)||/\.(jpe?g|jfif|png|webp|bmp|gif|avif)$/i.test(f.name);
 const baseName=n=>n.replace(/\.(pdf|jpe?g|jfif|png|webp|bmp|gif|avif)$/i,'');
-async function imageToPdf(file){
+async function prepImage(file){
   let bmp;
   try{bmp=await createImageBitmap(file,{imageOrientation:'from-image'})}
   catch(e){bmp=await new Promise((ok,no)=>{const u=URL.createObjectURL(file),im=new Image();im.onload=()=>{URL.revokeObjectURL(u);ok(im)};im.onerror=()=>{URL.revokeObjectURL(u);no(new Error('Resim çözülemedi (biçim desteklenmiyor olabilir)'))};im.src=u})}
@@ -376,23 +439,29 @@ async function imageToPdf(file){
   const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',0.95));
   if(!blob)throw new Error('Resim dönüştürülemedi');
   const jpg=new Uint8Array(await blob.arrayBuffer());
-  const pk=Math.min(1,1600/Math.max(w,h)),pw=(w*pk).toFixed(2),ph=(h*pk).toFixed(2);
-  const enc=new TextEncoder(),parts=[],offs=[];let len=0;
+  const pk=Math.min(1,1600/Math.max(w,h));
+  return{jpg,w,h,pw:(w*pk).toFixed(2),ph:(h*pk).toFixed(2)};
+}
+// Resim(ler)den çok sayfalı PDF üretir (her resim bir sayfa)
+function pdfBlobFromImgs(imgs){
+  const enc=new TextEncoder(),parts=[],offs=[],n=imgs.length;let len=0;
   const add=b=>{if(typeof b==='string')b=enc.encode(b);parts.push(b);len+=b.length};
-  const obj=(n,body)=>{offs[n]=len;add(n+' 0 obj\n'+body+'\nendobj\n')};
+  const obj=(i,body)=>{offs[i]=len;add(i+' 0 obj\n'+body+'\nendobj\n')};
   add('%PDF-1.4\n');
   obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
-  obj(2,'<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
-  obj(3,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+pw+' '+ph+'] /Contents 4 0 R /Resources << /XObject << /Im0 5 0 R >> >> >>');
-  const cs='q '+pw+' 0 0 '+ph+' 0 0 cm /Im0 Do Q';
-  obj(4,'<< /Length '+cs.length+' >>\nstream\n'+cs+'\nendstream');
-  offs[5]=len;
-  add('5 0 obj\n<< /Type /XObject /Subtype /Image /Width '+w+' /Height '+h+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+jpg.length+' >>\nstream\n');
-  add(jpg);add('\nendstream\nendobj\n');
-  const xr=len;let xt='xref\n0 6\n0000000000 65535 f \n';
-  for(let i=1;i<=5;i++)xt+=String(offs[i]).padStart(10,'0')+' 00000 n \n';
-  add(xt+'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+xr+'\n%%EOF');
-  return new Uint8Array(await new Blob(parts).arrayBuffer());
+  obj(2,'<< /Type /Pages /Kids ['+imgs.map((_,i)=>(3+3*i)+' 0 R').join(' ')+'] /Count '+n+' >>');
+  imgs.forEach((im,i)=>{
+    const pn=3+3*i,cn=4+3*i,xn=5+3*i,cs='q '+im.pw+' 0 0 '+im.ph+' 0 0 cm /Im0 Do Q';
+    obj(pn,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+im.pw+' '+im.ph+'] /Contents '+cn+' 0 R /Resources << /XObject << /Im0 '+xn+' 0 R >> >> >>');
+    obj(cn,'<< /Length '+cs.length+' >>\nstream\n'+cs+'\nendstream');
+    offs[xn]=len;
+    add(xn+' 0 obj\n<< /Type /XObject /Subtype /Image /Width '+im.w+' /Height '+im.h+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+im.jpg.length+' >>\nstream\n');
+    add(im.jpg);add('\nendstream\nendobj\n');
+  });
+  const total=3*n+3,xr=len;let xt='xref\n0 '+total+'\n0000000000 65535 f \n';
+  for(let i=1;i<total;i++)xt+=String(offs[i]).padStart(10,'0')+' 00000 n \n';
+  add(xt+'trailer\n<< /Size '+total+' /Root 1 0 R >>\nstartxref\n'+xr+'\n%%EOF');
+  return new Blob(parts,{type:'application/pdf'});
 }
 async function openFiles(files){
   files=[...files];
@@ -406,29 +475,30 @@ async function openFiles(files){
   }
   if(ok.length>1)toast(ok.length+' dosya ayrı sekmelerde açıldı');
 }
-async function openFile(file,go=true){
+async function openFile(file,go=true,pre){
   const dk=file.name+'|'+file.size+'|'+(file.lastModified||0);
   const dup=tabs.find(t=>t.dk===dk);
   if(dup){if(go)activate(dup);toast('Bu dosya zaten açık: '+file.name);return dup}
   try{
     await ensurePdf();
     if(go)toast('Açılıyor: '+file.name,1500);
-    let data,pdfBlob=null;
-    if(isImg(file)){data=await imageToPdf(file);pdfBlob=new Blob([data],{type:'application/pdf'})}
+    let data,imgs=null;
+    if(pre)imgs=pre.imgs;else if(isImg(file))imgs=[await prepImage(file)];
+    if(imgs)data=new Uint8Array(await pdfBlobFromImgs(imgs).arrayBuffer());
     else data=new Uint8Array(await file.arrayBuffer());
     const task=pdfjsLib.getDocument({data});
     task.onPassword=(cb,reason)=>{const p=prompt(reason===2?'Şifre yanlış, tekrar deneyin:':'Bu PDF şifreli. Şifre:');if(p)cb(p);else task.destroy()};
     const doc=await task.promise;
     const pages=await Promise.all(Array.from({length:doc.numPages},(_,i)=>doc.getPage(i+1)));
-    const tab={id:++uid,name:file.name,key:file.name+'|'+file.size,dk,file,pdfBlob,isImg:!!pdfBlob,doc,pages,scale:1,rot:0,cur:1,tcache:[],query:'',saveTop:0,fit:true,pendingPage:0};
+    const tab={id:++uid,name:file.name,key:file.name+'|'+file.size,dk,file,imgs,isImg:!!imgs,doc,pages,scale:1,rot:0,cur:1,tcache:[],query:'',saveTop:0,fit:true,pendingPage:0};
     buildTab(tab);tabs.push(tab);
-    const saved=readPos()[tab.key];
+    const saved=pre?null:readPos()[tab.key];
     fitWidth(tab,true);
     if(saved){if(!saved.fit&&saved.scale)setScale(tab,saved.scale);tab.pendingPage=saved.page||1}
     $('#empty').style.display='none';
     renderTabBar();
     if(go||!active)activate(tab);
-    if(tab.isImg&&go){setMode('ocr');toast('Resim açıldı: metin/tablo için bir alan seçin ya da 📄 Sayfa düğmesine basın',4000)}
+    if(tab.isImg&&go){setMode('ocr');if(!pre)toast('Resim açıldı: metin/tablo için bir alan seçin ya da 📄 Sayfa düğmesine basın',4000)}
     return tab;
   }catch(e){if(e&&e.name==='PasswordException')return;toast('Açılamadı: '+(e.message||e),4000)}
 }
@@ -446,13 +516,25 @@ function buildTab(tab){
   // küçük resimler
   const th=document.createElement('div');tab.thumbsEl=th;th.style.display='none';$('#sidebar').append(th);
   tab.tio=new IntersectionObserver(es=>{for(const e of es){if(e.isIntersecting&&!e.target._done){e.target._done=true;renderThumb(tab,+e.target.dataset.i,e.target)}}},{root:$('#sidebar'),rootMargin:'300px 0px'});
-  tab.pages.forEach((p,i)=>{
-    const vp=p.getViewport({scale:0.2,rotation:p.rotate});
-    const d=document.createElement('div');d.className='thumb';d.dataset.i=i;
-    d.innerHTML='<div class="ph" style="width:100%;aspect-ratio:'+vp.width+'/'+vp.height+'"></div><div>'+(i+1)+'</div>';
-    d.onclick=()=>goPage(i+1,tab);th.append(d);tab.tio.observe(d);
-  });
+  tab.pages.forEach((p,i)=>addThumb(tab,i));
   layout(tab);
+}
+function addThumb(tab,i){
+  const p=tab.pages[i],vp=p.getViewport({scale:0.2,rotation:p.rotate});
+  const d=document.createElement('div');d.className='thumb';d.dataset.i=i;
+  d.innerHTML='<div class="ph" style="width:100%;aspect-ratio:'+vp.width+'/'+vp.height+'"></div><div>'+(i+1)+'</div>';
+  d.onclick=()=>goPage(i+1,tab);tab.thumbsEl.append(d);tab.tio.observe(d);
+}
+// Var olan (resimlerden oluşan) sekmeye yeni sayfa ekler
+async function appendImgToTab(tab,img){
+  const bytes=new Uint8Array(await pdfBlobFromImgs([img]).arrayBuffer());
+  const doc=await pdfjsLib.getDocument({data:bytes}).promise,page=await doc.getPage(1);
+  (tab.docs||(tab.docs=[])).push(doc);tab.imgs.push(img);tab.pages.push(page);
+  const i=tab.pages.length-1,w=document.createElement('div');
+  w.className='page';w.dataset.i=i;tab.pagesEl.append(w);tab.wraps.push(w);
+  const vp=pageVp(tab,i);w.style.width=vp.width+'px';w.style.height=vp.height+'px';
+  tab.io.observe(w);addThumb(tab,i);
+  if(tab===active)updatePageUI();
 }
 async function renderThumb(tab,i,el){
   try{
@@ -570,7 +652,7 @@ function closeTab(tab){
   const i=tabs.indexOf(tab);if(i<0)return;
   if(sel&&sel.tab===tab)clearSel();
   savePos(tab);tab.io.disconnect();tab.tio.disconnect();
-  tab.viewer.remove();tab.thumbsEl.remove();try{tab.doc.destroy()}catch(e){}
+  tab.viewer.remove();tab.thumbsEl.remove();try{tab.doc.destroy()}catch(e){}(tab.docs||[]).forEach(d=>{try{d.destroy()}catch(e){}});
   tabs.splice(i,1);
   if(!tabs.length){active=null;document.title='PDF Okuyucu + OCR';$('#empty').style.display='flex';renderTabBar();$('#pageTotal').textContent='/ 0';$('#pageInput').value=1}
   else activate(tabs[Math.min(i,tabs.length-1)]);
@@ -622,7 +704,7 @@ function placeSel(){
   const w=sel.tab.wraps[sel.i],el=document.createElement('div');
   el.className='selbox fixed';
   el.innerHTML=['nw','n','ne','e','se','s','sw','w'].map(h=>'<i class="hd" data-h="'+h+'"></i>').join('')+
-    '<div class="selbar"><button class="primary" data-a="re" title="Bu alandan metni yeniden çıkar (Enter)">↻ Yeniden çıkar</button><button data-a="tb" title="Tablo modu: bu alanı tablo olarak çıkar">▦ Tablo</button><button data-a="x" title="Seçimi kaldır (Esc)">✕</button></div>';
+    '<div class="selbar"><button class="primary" data-a="re" title="Bu alandan metni yeniden çıkar (Enter)">↻ Yeniden çıkar</button><button data-a="tb" title="Tablo modu: bu alanı tablo olarak çıkar">▦ Tablo</button><button data-a="img" title="Seçili alanı resim olarak kopyala (Word içine Ctrl+V ile yapışır)">🖼 Resim</button><button data-a="x" title="Seçimi kaldır (Esc)">✕</button></div>';
   w.append(el);sel.el=el;
   el.addEventListener('pointerdown',e=>{
     if(e.target.closest('.selbar')){e.stopPropagation();return}
@@ -631,7 +713,7 @@ function placeSel(){
   });
   el.querySelector('.selbar').addEventListener('click',e=>{
     const b=e.target.closest('button');if(!b)return;
-    if(b.dataset.a==='re')reOcr();else if(b.dataset.a==='tb'){setTableMode(!S.tableMode);reOcr()}else clearSel();
+    if(b.dataset.a==='re')reOcr();else if(b.dataset.a==='tb'){setTableMode(!S.tableMode);reOcr()}else if(b.dataset.a==='img')copyCropImage();else clearSel();
   });
   syncTb();positionSel();
 }
@@ -668,6 +750,15 @@ function startSelDrag(e,m){
     if(sel&&sel.dirty&&S.autoRe)reOcr();
   };
   el.addEventListener('pointermove',mv);el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);
+}
+async function copyCropImage(){
+  if(!sel)return;
+  try{
+    const c=await renderCrop(sel.tab,sel.i,selRect());
+    const blob=await new Promise(r=>c.toBlob(r,'image/png'));
+    await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+    toast('Seçili alan resim olarak kopyalandı (Word\'de Ctrl+V)',3000);
+  }catch(e){toast('Resim kopyalanamadı: '+(e.message||e),4000)}
 }
 async function reOcr(){
   if(!sel)return;
@@ -1128,7 +1219,7 @@ function openSettings(){
   const so=$('#sOrder');so.value=S.order;if(so.value!==S.order)so.selectedIndex=0;
   $('#sFontFamily').value=S.fontFamily;$('#sFontSize').value=S.fontSize;$('#sLine').value=String(S.lineSpacing);$('#sJustify').checked=!!S.justify;
   $('#sJoinMode').value=S.joinMode;$('#sJoinKeep').value=S.joinKeep;$('#sTessLang').value=S.tessLang;$('#sTessLocal').value=S.tessLocal;$('#sPrompt').value=S.prompt;
-  $('#sEmbedded').checked=S.preferEmbedded;$('#sAutoCopy').checked=S.autoCopy;$('#sAutoRe').checked=!!S.autoRe;
+  $('#sEmbedded').checked=S.preferEmbedded;$('#sAutoCopy').checked=S.autoCopy;$('#sAutoRe').checked=!!S.autoRe;$('#sSigUrl').value=S.sigUrl||'';
   renderKeyStatus();$('#modal').classList.add('show');
 }
 function saveSettings(){
@@ -1141,7 +1232,7 @@ function saveSettings(){
   const jk=parseInt($('#sJoinKeep').value);S.joinKeep=isNaN(jk)?DEF.joinKeep:Math.min(20,Math.max(0,jk));
   applyFormat();
   S.order=$('#sOrder').value;S.tessLang=$('#sTessLang').value.trim()||'tur+eng';S.tessLocal=$('#sTessLocal').value.trim();
-  S.prompt=$('#sPrompt').value.trim()||DEF.prompt;S.preferEmbedded=$('#sEmbedded').checked;S.autoCopy=$('#sAutoCopy').checked;S.autoRe=$('#sAutoRe').checked;
+  S.prompt=$('#sPrompt').value.trim()||DEF.prompt;S.preferEmbedded=$('#sEmbedded').checked;S.autoCopy=$('#sAutoCopy').checked;S.autoRe=$('#sAutoRe').checked;S.sigUrl=$('#sSigUrl').value.trim();
   save();$('#modal').classList.remove('show');toast('Ayarlar kaydedildi');
 }
 
@@ -1359,7 +1450,7 @@ $('#pCancel').onclick=()=>$('#printModal').classList.remove('show');
 $('#printModal').addEventListener('click',e=>{if(e.target.id==='printModal')$('#printModal').classList.remove('show')});
 
 async function savePdf(){
-  if(!needPdf())return;const t=active,f=t.pdfBlob||t.file,nm=t.pdfBlob?baseName(t.name)+'.pdf':t.name;
+  if(!needPdf())return;const t=active,f=t.imgs?pdfBlobFromImgs(t.imgs):t.file,nm=t.imgs?(t.saveName||baseName(t.name)+'.pdf'):t.name;
   if(!f)return toast('Dosya bulunamadı');
   if(window.showSaveFilePicker){
     try{
@@ -1460,6 +1551,342 @@ addEventListener('paste',e=>{
   const fs=items.map((i,k)=>{const f=i.getAsFile(),ext=(f.type.split('/')[1]||'png').replace('jpeg','jpg');return new File([f],'pano-'+stamp+(k?'-'+(k+1):'')+'.'+ext,{type:f.type,lastModified:Date.now()+k})});
   openFiles(fs);
 });
+/* ---------- QR kodu (küçük gömülü üretici) ---------- */
+/* Minimal QR kodu üretici (bayt modu, hata düzeltme M, sürüm 1-12) */
+function qrMake(text){
+  const ECC=[0,10,16,26,18,24,16,18,22,22,26,30,22],BLK=[0,1,1,1,2,2,4,4,4,5,5,5,8];
+  const data=Array.from(new TextEncoder().encode(text));
+  const rawMods=v=>{let r=(16*v+128)*v+64;if(v>=2){const n=Math.floor(v/7)+2;r-=(25*n-10)*n-55;if(v>=7)r-=36}return r};
+  let ver=0;
+  for(let v=1;v<=12;v++){
+    const cap=Math.floor(rawMods(v)/8)-ECC[v]*BLK[v],cc=v<10?8:16;
+    if(4+cc+8*data.length<=cap*8){ver=v;break}
+  }
+  if(!ver)throw new Error('QR için metin çok uzun');
+  const size=ver*4+17,rawCw=Math.floor(rawMods(ver)/8),dataCw=rawCw-ECC[ver]*BLK[ver];
+  // bit akışı
+  const bits=[];const put=(val,n)=>{for(let i=n-1;i>=0;i--)bits.push((val>>>i)&1)};
+  put(4,4);put(data.length,ver<10?8:16);data.forEach(b=>put(b,8));
+  put(0,Math.min(4,dataCw*8-bits.length));while(bits.length%8)bits.push(0);
+  for(let p=0xEC;bits.length<dataCw*8;p^=0xEC^0x11)put(p,8);
+  const cw=[];for(let i=0;i<bits.length;i+=8){let b=0;for(let j=0;j<8;j++)b=(b<<1)|bits[i+j];cw.push(b)}
+  // Reed-Solomon
+  const mul=(x,y)=>{let z=0;for(let i=7;i>=0;i--){z=(z<<1)^((z>>>7)*0x11D);z^=((y>>>i)&1)*x}return z&255};
+  const gen=d=>{const r=new Array(d).fill(0);r[d-1]=1;let root=1;for(let i=0;i<d;i++){for(let j=0;j<d;j++){r[j]=mul(r[j],root);if(j+1<d)r[j]^=r[j+1]}root=mul(root,2)}return r};
+  const rem=(dat,div)=>{const r=new Array(div.length).fill(0);for(const b of dat){const f=b^r.shift();r.push(0);div.forEach((c,i)=>{r[i]^=mul(c,f)})}return r};
+  const nb=BLK[ver],eb=ECC[ver],shortN=nb-rawCw%nb,shortLen=Math.floor(rawCw/nb),div=gen(eb),blocks=[];
+  for(let i=0,k=0;i<nb;i++){const dl=shortLen-eb+(i<shortN?0:1),dat=cw.slice(k,k+dl);k+=dl;const e=rem(dat,div);if(i<shortN)dat.push(0);blocks.push(dat.concat(e))}
+  const all=[];
+  for(let i=0;i<blocks[0].length;i++)blocks.forEach((b,j)=>{if(i!==shortLen-eb||j>=shortN)all.push(b[i])});
+  // matris
+  const M=Array.from({length:size},()=>new Array(size).fill(false)),F=Array.from({length:size},()=>new Array(size).fill(false));
+  const setF=(x,y,d)=>{M[y][x]=d;F[y][x]=true};
+  for(let i=0;i<size;i++){setF(6,i,i%2===0);setF(i,6,i%2===0)}
+  const finder=(cx,cy)=>{for(let dy=-4;dy<=4;dy++)for(let dx=-4;dx<=4;dx++){const x=cx+dx,y=cy+dy;if(x<0||y<0||x>=size||y>=size)continue;const d=Math.max(Math.abs(dx),Math.abs(dy));setF(x,y,d!==2&&d!==4)}};
+  finder(3,3);finder(size-4,3);finder(3,size-4);
+  if(ver>1){
+    const n=Math.floor(ver/7)+2,step=Math.ceil((ver*4+4)/(n*2-2))*2,pos=[6];
+    for(let p=size-7;pos.length<n;p-=step)pos.splice(1,0,p);
+    for(let i=0;i<n;i++)for(let j=0;j<n;j++){
+      if((i===0&&j===0)||(i===0&&j===n-1)||(i===n-1&&j===0))continue;
+      for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++)setF(pos[i]+dx,pos[j]+dy,Math.max(Math.abs(dx),Math.abs(dy))!==1);
+    }
+  }
+  // biçim alanlarını ayır (sonra yazılır)
+  const fmt=mask=>{
+    const d=mask;let r=d;for(let i=0;i<10;i++)r=(r<<1)^((r>>>9)*0x537);
+    const b=((d<<10)|r)^0x5412,bit=i=>((b>>>i)&1)===1;
+    for(let i=0;i<=5;i++)setF(8,i,bit(i));setF(8,7,bit(6));setF(8,8,bit(7));setF(7,8,bit(8));
+    for(let i=9;i<15;i++)setF(14-i,8,bit(i));
+    for(let i=0;i<8;i++)setF(size-1-i,8,bit(i));
+    for(let i=8;i<15;i++)setF(8,size-15+i,bit(i));
+    setF(8,size-8,true);
+  };
+  fmt(0);
+  if(ver>=7){
+    let r=ver;for(let i=0;i<12;i++)r=(r<<1)^((r>>>11)*0x1F25);
+    const b=(ver<<12)|r;
+    for(let i=0;i<18;i++){const c=((b>>>i)&1)===1,a=size-11+i%3,bb=Math.floor(i/3);setF(a,bb,c);setF(bb,a,c)}
+  }
+  // veri yerleştirme
+  let bi=0;
+  for(let right=size-1;right>=1;right-=2){
+    if(right===6)right=5;
+    for(let vert=0;vert<size;vert++)for(let j=0;j<2;j++){
+      const x=right-j,up=((right+1)&2)===0,y=up?size-1-vert:vert;
+      if(!F[y][x]&&bi<all.length*8){M[y][x]=((all[bi>>3]>>>(7-(bi&7)))&1)===1;bi++}
+    }
+  }
+  // maske seçimi
+  const cond=[(x,y)=>(x+y)%2===0,(x,y)=>y%2===0,(x,y)=>x%3===0,(x,y)=>(x+y)%3===0,(x,y)=>(Math.floor(x/3)+Math.floor(y/2))%2===0,(x,y)=>x*y%2+x*y%3===0,(x,y)=>(x*y%2+x*y%3)%2===0,(x,y)=>((x+y)%2+x*y%3)%2===0];
+  const apply=m=>{for(let y=0;y<size;y++)for(let x=0;x<size;x++)if(!F[y][x]&&cond[m](x,y))M[y][x]=!M[y][x]};
+  const penalty=()=>{
+    let p=0;
+    for(let t=0;t<2;t++)for(let a=0;a<size;a++){let run=1;for(let b=1;b<size;b++){const c=t?M[b][a]:M[a][b],pr=t?M[b-1][a]:M[a][b-1];if(c===pr){run++;if(run===5)p+=3;else if(run>5)p++}else run=1}}
+    for(let y=0;y<size-1;y++)for(let x=0;x<size-1;x++){const c=M[y][x];if(c===M[y][x+1]&&c===M[y+1][x]&&c===M[y+1][x+1])p+=3}
+    let dark=0;for(const r of M)for(const c of r)if(c)dark++;
+    p+=Math.floor(Math.abs(dark*20-size*size*10)/(size*size))*10;
+    return p;
+  };
+  let best=0,bp=1e9;
+  for(let m=0;m<8;m++){apply(m);fmt(m);const p=penalty();if(p<bp){bp=p;best=m}apply(m)}
+  apply(best);fmt(best);
+  return M;
+}
+
+function drawQr(canvas,text){
+  const M=qrMake(text),n=M.length,q=4,sc=Math.max(3,Math.floor(260/(n+2*q))),px=(n+2*q)*sc;
+  canvas.width=canvas.height=px;canvas.style.width=canvas.style.height=px+'px';
+  const x=canvas.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,px,px);x.fillStyle='#000';
+  for(let y=0;y<n;y++)for(let c=0;c<n;c++)if(M[y][c])x.fillRect((c+q)*sc,(y+q)*sc,sc,sc);
+}
+
+/* ---------- Telefon bağlantısı (WebRTC; eşleşme ntfy ile, fotoğraflar doğrudan cihazdan cihaza) ---------- */
+const PHLS='pdfocr.phone.v1',MAXF=40*1024*1024;
+const SIG_DEFAULT='https://ntfy.sh';
+const iceCfg=()=>({iceServers:Array.isArray(S.ice)?S.ice:[{urls:['stun:stun.l.google.com:19302','stun:stun.cloudflare.com:3478']}]});
+const rid=n=>{const a=new Uint8Array(n);crypto.getRandomValues(a);return Array.from(a,b=>'abcdefghjkmnpqrstuvwxyz23456789'[b%31]).join('')};
+const ph={role:null,token:'',me:'',sig:null,pc:null,dc:null,peer:'',peerName:'',state:'idle',sigOk:null,count:0,rx:null,outq:[],pcT:0,iceBuf:[],iceT:0,pend:[],hello:0,list:[],sending:false,chain:Promise.resolve()};
+let phoneTab=null;
+function sigOpen(token,onmsg){
+  const base=((S.sigUrl||'').trim()||SIG_DEFAULT).replace(/\/+$/,''),topic='pdfocr-'+token,seen=new Set();
+  let es=null,dead=false,since=Math.floor(Date.now()/1000)-2;
+  es=new EventSource(base+'/'+topic+'/sse?since='+since);
+  es.onopen=()=>{if(!dead){ph.sigOk=true;updatePhoneUI()}};
+  es.onerror=()=>{if(!dead){ph.sigOk=false;updatePhoneUI()}};
+  es.onmessage=ev=>{
+    let d;try{d=JSON.parse(ev.data)}catch(e){return}
+    if(d.event!=='message'||!d.message||seen.has(d.id))return;
+    seen.add(d.id);
+    let m;try{m=JSON.parse(d.message)}catch(e){return}
+    try{onmsg(m)}catch(e){console.warn(e)}
+  };
+  return{
+    send:m=>fetch(base+'/'+topic,{method:'POST',body:JSON.stringify(m)}).catch(()=>{ph.sigOk=false;updatePhoneUI()}),
+    close:()=>{dead=true;es.close()}
+  };
+}
+function phSaveLs(){try{localStorage.setItem(PHLS,JSON.stringify({role:ph.role,token:ph.token,t:Date.now()}))}catch(e){}}
+function phStart(token){
+  phStop(true);
+  Object.assign(ph,{role:'host',token:token||rid(12),me:rid(6),sigOk:null,peerName:''});
+  ph.sig=sigOpen(ph.token,hostMsg);phSaveLs();refreshState();
+}
+function phJoin(token){
+  token=String(token||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  if(token.length<10){toast('Kod geçersiz');return false}
+  phStop(true);
+  Object.assign(ph,{role:'guest',token,me:rid(6),sigOk:null});
+  ph.sig=sigOpen(token,guestMsg);
+  const hello=()=>{if(ph.role==='guest'&&ph.state!=='connected'&&ph.sig)ph.sig.send({t:'hello',from:ph.me})};
+  setTimeout(hello,300);ph.hello=setInterval(hello,2500);
+  phSaveLs();refreshState();return true;
+}
+function phStop(keep){
+  clearInterval(ph.hello);clearTimeout(ph.iceT);closePc();
+  if(ph.sig)ph.sig.close();
+  Object.assign(ph,{role:null,token:'',sig:null,peer:'',state:'idle',iceBuf:[],pend:[],sigOk:null});
+  if(!keep){try{localStorage.removeItem(PHLS)}catch(e){}ph.outq=[];pvCamStop()}
+  updatePhoneUI();
+}
+function closePc(){
+  if(ph.dc){try{ph.dc.onclose=null;ph.dc.close()}catch(e){}ph.dc=null}
+  if(ph.pc){try{ph.pc.onconnectionstatechange=null;ph.pc.close()}catch(e){}ph.pc=null}
+  ph.rx=null;
+}
+function wirePc(pc){
+  pc.onicecandidate=e=>{
+    if(!e.candidate||pc!==ph.pc)return;
+    ph.iceBuf.push(e.candidate.toJSON());
+    clearTimeout(ph.iceT);
+    ph.iceT=setTimeout(()=>{const c=ph.iceBuf.splice(0);if(c.length&&ph.sig)ph.sig.send({t:'ice',from:ph.me,to:ph.peer,c})},250);
+  };
+  pc.onconnectionstatechange=()=>{if(pc===ph.pc)refreshState()};
+}
+function addIce(list){for(const c of list||[]){if(ph.pc&&ph.pc.remoteDescription)ph.pc.addIceCandidate(c).catch(()=>{});else ph.pend.push(c)}}
+function flushIce(){ph.pend.splice(0).forEach(c=>ph.pc&&ph.pc.addIceCandidate(c).catch(()=>{}))}
+async function hostMsg(m){
+  if(m.from===ph.me||ph.role!=='host')return;
+  if(m.t==='hello'){
+    if(ph.pc&&ph.peer===m.from&&['new','connecting'].includes(ph.pc.connectionState)&&Date.now()-ph.pcT<20000)return;
+    closePc();
+    const pc=new RTCPeerConnection(iceCfg());
+    Object.assign(ph,{pc,peer:m.from,pcT:Date.now(),iceBuf:[],pend:[]});
+    wirePc(pc);setupDc(pc.createDataChannel('f',{ordered:true}));
+    const off=await pc.createOffer();await pc.setLocalDescription(off);
+    ph.sig.send({t:'offer',from:ph.me,to:m.from,sdp:{type:off.type,sdp:off.sdp}});
+    refreshState();
+  }else if(m.to===ph.me&&m.from===ph.peer){
+    if(m.t==='answer'&&ph.pc&&ph.pc.signalingState==='have-local-offer'){await ph.pc.setRemoteDescription(m.sdp);flushIce()}
+    else if(m.t==='ice')addIce(m.c);
+  }
+}
+async function guestMsg(m){
+  if(m.from===ph.me||ph.role!=='guest')return;
+  if(m.t==='offer'&&m.to===ph.me){
+    closePc();
+    const pc=new RTCPeerConnection(iceCfg());
+    Object.assign(ph,{pc,peer:m.from,pcT:Date.now(),iceBuf:[],pend:[]});
+    wirePc(pc);pc.ondatachannel=e=>setupDc(e.channel);
+    await pc.setRemoteDescription(m.sdp);flushIce();
+    const ans=await pc.createAnswer();await pc.setLocalDescription(ans);
+    ph.sig.send({t:'answer',from:ph.me,to:m.from,sdp:{type:ans.type,sdp:ans.sdp}});
+    refreshState();
+  }else if(m.t==='ice'&&m.to===ph.me&&m.from===ph.peer)addIce(m.c);
+}
+function deviceName(){const m=/Android[^;)]*;\s*([^;)]+)/.exec(navigator.userAgent||'');return m?m[1].trim().slice(0,30):/iPhone|iPad/.test(navigator.userAgent||'')?'iPhone':'Telefon'}
+const cleanName=n=>String(n||'foto.jpg').replace(/[\\/:*?"<>|\x00-\x1f]/g,'_').slice(0,80);
+function dcSend(o){if(ph.dc&&ph.dc.readyState==='open')ph.dc.send(typeof o==='string'?o:JSON.stringify(o))}
+function setupDc(dc){
+  ph.dc=dc;dc.binaryType='arraybuffer';
+  dc.onopen=()=>{if(dc!==ph.dc)return;dcSend(ph.role==='guest'?{t:'info',name:deviceName()}:{t:'ok'});refreshState();flushOut()};
+  dc.onclose=()=>{if(dc===ph.dc)refreshState()};
+  dc.onmessage=e=>dcMsg(e.data);
+}
+function dcMsg(d){
+  if(typeof d!=='string'){const r=ph.rx;if(!r)return;r.chunks.push(d);r.got+=d.byteLength;if(r.got>r.size)ph.rx=null;return}
+  let m;try{m=JSON.parse(d)}catch(e){return}
+  if(m.t==='file'&&ph.role==='host'){
+    if(!(m.size>0&&m.size<=MAXF)){dcSend({t:'nack',id:m.id});return}
+    ph.rx={id:m.id,name:cleanName(m.name),type:/^image\/(jpeg|png|webp)$/.test(m.type)?m.type:'image/jpeg',size:m.size,chunks:[],got:0};
+  }else if(m.t==='end'&&ph.rx&&ph.rx.id===m.id){
+    const r=ph.rx;ph.rx=null;
+    if(r.got===r.size){dcSend({t:'ack',id:r.id});gotPhoto(new File(r.chunks,r.name,{type:r.type,lastModified:Date.now()}))}
+    else dcSend({t:'nack',id:r.id});
+  }else if(m.t==='ack'&&ph.role==='guest')pvMark(m.id,'ack');
+  else if(m.t==='nack'&&ph.role==='guest')pvMark(m.id,'nack');
+  else if(m.t==='info'&&ph.role==='host'){ph.peerName=String(m.name||'Telefon').slice(0,40);updatePhoneUI()}
+}
+function refreshState(){
+  if(ph.pc&&['failed','closed'].includes(ph.pc.connectionState))closePc();
+  const ok=ph.dc&&ph.dc.readyState==='open'&&ph.pc&&ph.pc.connectionState==='connected';
+  const ns=!ph.role?'idle':ok?'connected':ph.pc?'connecting':'wait',was=ph.state;
+  ph.state=ns;
+  if(was!==ns){
+    if(ns==='connected')toast(ph.role==='host'?'📱 Telefon bağlandı':'💻 Bilgisayara bağlandı');
+    else if(was==='connected')toast('Telefon bağlantısı koptu; yeniden bağlanılıyor…');
+  }
+  updatePhoneUI();
+}
+async function flushOut(){
+  if(ph.sending)return;ph.sending=true;
+  try{
+    while(ph.outq.length&&ph.dc&&ph.dc.readyState==='open'){
+      const it=ph.outq[0],dc=ph.dc;
+      dcSend({t:'file',id:it.id,name:it.name,type:it.blob.type,size:it.blob.size});
+      for(let o=0;o<it.blob.size;o+=16384){
+        if(dc.readyState!=='open')throw new Error('kapandı');
+        if(dc.bufferedAmount>1048576)await new Promise(r=>{dc.bufferedAmountLowThreshold=262144;const h=()=>{dc.removeEventListener('bufferedamountlow',h);r()};dc.addEventListener('bufferedamountlow',h);setTimeout(r,3000)});
+        dc.send(await it.blob.slice(o,o+16384).arrayBuffer());
+      }
+      dcSend({t:'end',id:it.id});ph.outq.shift();pvMark(it.id,'sent');
+    }
+  }catch(e){}
+  ph.sending=false;
+}
+// Bilgisayar tarafı: gelen fotoğraf
+function gotPhoto(file){
+  ph.count++;
+  ph.list.unshift({url:URL.createObjectURL(file)});if(ph.list.length>24)URL.revokeObjectURL(ph.list.pop().url);
+  toast('📱 Fotoğraf alındı ('+ph.count+')');
+  ph.chain=ph.chain.then(async()=>{
+    try{if(S.phoneMode==='pdf')await addToSession(file);else await openFile(file,true)}
+    catch(e){toast('Fotoğraf açılamadı: '+(e.message||e),4000)}
+    updatePhoneUI();
+  });
+}
+async function addToSession(file){
+  await ensurePdf();
+  const img=await prepImage(file);
+  if(phoneTab&&tabs.includes(phoneTab)){
+    await appendImgToTab(phoneTab,img);
+    phoneTab.name='📱 Telefon ('+phoneTab.pages.length+')';renderTabBar();
+    activate(phoneTab);goPage(phoneTab.pages.length,phoneTab);
+  }else{
+    const d=new Date(),z=n=>String(n).padStart(2,'0');
+    phoneTab=await openFile({name:'📱 Telefon (1)',size:0,lastModified:Date.now(),type:'application/pdf'},true,{imgs:[img]});
+    if(phoneTab)phoneTab.saveName='telefon-'+d.getFullYear()+z(d.getMonth()+1)+z(d.getDate())+'-'+z(d.getHours())+z(d.getMinutes())+'.pdf';
+  }
+}
+// Telefon tarafı: kamera ekranı
+const pv={stream:null,facing:'environment',n:0};
+const stampNow=()=>{const d=new Date(),z=n=>String(n).padStart(2,'0');return d.getFullYear()+z(d.getMonth()+1)+z(d.getDate())+'-'+z(d.getHours())+z(d.getMinutes())+z(d.getSeconds())};
+async function pvOpen(){$('#phoneView').classList.add('show');updatePhoneUI();await pvCam()}
+function pvCamStop(){if(pv.stream){pv.stream.getTracks().forEach(t=>t.stop());pv.stream=null}}
+async function pvCam(){
+  pvCamStop();const el=$('#phoneView');
+  try{
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw Object.assign(new Error('yok'),{name:'Desteklenmiyor'});
+    pv.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:pv.facing},width:{ideal:4096},height:{ideal:4096}},audio:false});
+    const v=$('#pvVideo');v.srcObject=pv.stream;await v.play().catch(()=>{});
+    el.classList.remove('nocam');$('#pvMsg').textContent='Çektiğiniz her fotoğraf bilgisayara gönderilir.';
+  }catch(e){
+    el.classList.add('nocam');$('#pvMsg').textContent='Kamera açılamadı ('+(e.name||'hata')+'). "Kamera uyg." ile çekebilir ya da "Galeri"den seçebilirsiniz.';
+  }
+}
+function pvQueue(blob,name){
+  const id=rid(8);pv.n++;
+  const d=document.createElement('div');d.dataset.id=id;d.dataset.st='q';
+  const im=document.createElement('img');im.src=URL.createObjectURL(blob);im.onload=()=>URL.revokeObjectURL(im.src);d.append(im);
+  const strip=$('#pvStrip');strip.prepend(d);while(strip.children.length>40)strip.lastChild.remove();
+  ph.outq.push({blob,name:name||('foto-'+stampNow()+'-'+pv.n+'.jpg'),id});flushOut();
+  if(ph.state!=='connected')$('#pvMsg').textContent='Bağlantı bekleniyor; fotoğraflar kuyrukta, bağlanınca gönderilecek.';
+}
+function pvMark(id,st){const el=document.querySelector('#pvStrip [data-id="'+id+'"]');if(el)el.dataset.st=st}
+async function pvShot(){
+  const v=$('#pvVideo');
+  if(!pv.stream)return $('#pvCam').click();
+  if(!v.videoWidth)return toast('Kamera hazırlanıyor…',900);
+  const c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);
+  const f=$('#pvFlash');f.style.opacity=.7;setTimeout(()=>f.style.opacity=0,120);
+  try{navigator.vibrate&&navigator.vibrate(30)}catch(e){}
+  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',0.92));
+  if(blob)pvQueue(blob);
+}
+function phStateText(){
+  if(!ph.role)return'Bağlı değil';
+  if(ph.state==='connected')return ph.role==='host'?'Bağlı: '+(ph.peerName||'telefon')+' · '+ph.count+' fotoğraf alındı':'Bilgisayara bağlı';
+  if(ph.state==='connecting')return'Bağlanıyor…';
+  if(ph.sigOk===false)return'Eşleşme sunucusuna ulaşılamıyor (internet/ntfy?)';
+  return ph.role==='host'?'Telefon bekleniyor…':'Bilgisayar aranıyor…';
+}
+function updatePhoneUI(){
+  const b=$('#btnPhone');if(!b)return;
+  b.classList.toggle('on',ph.state==='connected');
+  b.textContent=ph.state==='connected'?'📱 ●':ph.role?'📱 …':'📱 Telefon';
+  const m=$('#phoneModal');m.dataset.role=ph.role||'idle';m.classList.toggle('conn',ph.state==='connected');
+  $('#phStatus').textContent=phStateText();$('#pvState').textContent=phStateText();
+  document.querySelectorAll('input[name=phMode]').forEach(r=>r.checked=r.value===S.phoneMode);
+  $('#phList').innerHTML=ph.list.map(i=>'<img src="'+i.url+'">').join('');
+  if(ph.role==='host'&&m.classList.contains('show')&&m._qrTok!==ph.token){
+    m._qrTok=ph.token;const link=phLink();
+    try{drawQr($('#phQr'),link)}catch(e){}
+    $('#phCode').textContent=ph.token.replace(/(.{4})/g,'$1-').replace(/-$/,'');
+  }
+}
+const phLink=()=>location.origin+location.pathname+'?pair='+ph.token;
+$('#btnPhone').onclick=()=>{$('#phoneModal').classList.add('show');$('#phoneModal')._qrTok='';updatePhoneUI()};
+$('#phClose').onclick=()=>$('#phoneModal').classList.remove('show');
+$('#phStart').onclick=()=>{phStart();$('#phoneModal')._qrTok='';updatePhoneUI()};
+$('#phJoin').onclick=()=>{if(phJoin($('#phJoinCode').value)){$('#phoneModal').classList.remove('show');pvOpen()}};
+$('#phJoinCode').addEventListener('keydown',e=>{if(e.key==='Enter')$('#phJoin').click()});
+$('#phStop').onclick=()=>{phStop();toast('Telefon bağlantısı kesildi')};
+$('#phOpenCam').onclick=()=>{$('#phoneModal').classList.remove('show');pvOpen()};
+$('#phNewSess').onclick=()=>{phoneTab=null;toast('Sonraki fotoğraf yeni bir PDF sekmesi başlatır')};
+$('#phCopyLink').onclick=async()=>{toast(await copyText(phLink())?'Bağlantı kopyalandı':'Kopyalanamadı')};
+document.querySelectorAll('input[name=phMode]').forEach(r=>r.onchange=()=>{S.phoneMode=r.value;save()});
+$('#pvClose').onclick=()=>{pvCamStop();$('#phoneView').classList.remove('show')};
+$('#pvShot').onclick=pvShot;
+$('#pvFlip').onclick=()=>{pv.facing=pv.facing==='environment'?'user':'environment';pvCam()};
+$('#pvGallery').onclick=()=>$('#pvFile').click();
+$('#pvNative').onclick=()=>$('#pvCam').click();
+for(const id of ['pvFile','pvCam'])$('#'+id).onchange=e=>{[...e.target.files].forEach(f=>pvQueue(f,f.name));e.target.value=''};
+(()=>{ // adresten (?pair=) ya da önceki oturumdan başlat
+  const m=location.search.match(/[?&]pair=([a-z0-9]+)/i);
+  if(m){window.history.replaceState(null,'',location.pathname);if(phJoin(m[1]))pvOpen();return}
+  try{const j=JSON.parse(localStorage.getItem(PHLS)||'null');if(j&&j.token&&Date.now()-j.t<12*3600e3){if(j.role==='host')phStart(j.token);else if(j.role==='guest')phJoin(j.token)}}catch(e){}
+})();
+
 // Windows/Chromium: PDF'e sağ tık > Birlikte aç ile gelen dosyalar
 if('launchQueue' in window){
   launchQueue.setConsumer(async p=>{
