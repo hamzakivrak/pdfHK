@@ -1,7 +1,7 @@
 {
   "name": "PDF Okuyucu + OCR",
   "short_name": "PDF OCR",
-  "description": "Çok sekmeli PDF okuyucu; seçilen bölgeden Gemini, Groq, Grok veya çevrimdışı Tesseract ile metin çıkarır.",
+  "description": "Çok sekmeli PDF ve resim okuyucu; seçilen bölgeden Gemini, Groq veya çevrimdışı Tesseract ile metin ve tablo çıkarır.",
   "id": "./",
   "start_url": "./index.html",
   "scope": "./",
@@ -10,18 +10,57 @@
   "theme_color": "#2f6df6",
   "lang": "tr",
   "launch_handler": {
-    "client_mode": ["focus-existing", "auto"]
+    "client_mode": [
+      "focus-existing",
+      "auto"
+    ]
   },
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ],
   "file_handlers": [
     {
       "action": "./index.html",
       "launch_type": "single-client",
-      "accept": { "application/pdf": [".pdf"] }
+      "accept": {
+        "application/pdf": [
+          ".pdf"
+        ],
+        "image/jpeg": [
+          ".jpg",
+          ".jpeg",
+          ".jfif"
+        ],
+        "image/png": [
+          ".png"
+        ],
+        "image/webp": [
+          ".webp"
+        ],
+        "image/bmp": [
+          ".bmp"
+        ],
+        "image/gif": [
+          ".gif"
+        ]
+      }
     }
   ],
   "share_target": {
@@ -30,7 +69,14 @@
     "enctype": "multipart/form-data",
     "params": {
       "files": [
-        { "name": "pdf", "accept": ["application/pdf", ".pdf"] }
+        {
+          "name": "pdf",
+          "accept": [
+            "application/pdf",
+            ".pdf",
+            "image/*"
+          ]
+        }
       ]
     }
   }

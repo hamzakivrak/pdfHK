@@ -198,8 +198,8 @@ label.chk input{width:auto}
  <section id="viewers">
   <div id="empty">
    <h2>PDF Okuyucu + OCR</h2>
-   <div>PDF dosyalarını buraya sürükleyin ya da açın.<br>Her dosya ayrı sekmede açılır.</div>
-   <button id="btnOpen2" class="primary">📂 PDF seç</button>
+   <div>PDF veya resim (JPG, PNG, WebP…) dosyalarını buraya sürükleyin ya da açın.<br>Her dosya ayrı sekmede açılır. Ekran görüntüsünü <kbd>Ctrl</kbd>+<kbd>V</kbd> ile yapıştırabilirsiniz.</div>
+   <button id="btnOpen2" class="primary">📂 Dosya seç</button>
    <div class="kb"><kbd>S</kbd> bölge OCR &nbsp; <kbd>T</kbd> metin seç &nbsp; <kbd>Ctrl</kbd>+<kbd>F</kbd> ara &nbsp; <kbd>+</kbd>/<kbd>−</kbd> yakınlaştır &nbsp; <kbd>←</kbd>/<kbd>→</kbd> sayfa &nbsp; <kbd>Ctrl</kbd>+<kbd>P</kbd> yazdır &nbsp; <kbd>Ctrl</kbd>+<kbd>S</kbd> kaydet</div>
   </div>
  </section>
@@ -256,8 +256,8 @@ label.chk input{width:auto}
  <div class="btnrow" style="justify-content:flex-end"><button id="pCancel">Vazgeç</button><button id="pGo" class="primary">Yazdır</button></div>
 </div></div>
 <div id="toast"></div>
-<div id="dropOv">PDF dosyalarını bırakın</div>
-<input type="file" id="file" accept="application/pdf,.pdf" multiple hidden>
+<div id="dropOv">PDF veya resim dosyalarını bırakın</div>
+<input type="file" id="file" accept="application/pdf,.pdf,image/jpeg,image/png,image/webp,image/bmp,image/gif,image/avif,.jpg,.jpeg,.jfif,.png,.webp,.bmp,.gif,.avif" multiple hidden>
 
 <div id="modal"><div class="box">
  <h3>⚙️ Ayarlar</h3>
@@ -360,31 +360,67 @@ function savePos(tab){const p=readPos();p[tab.key]={page:tab.cur,scale:tab.scale
   const ks=Object.keys(p);if(ks.length>60)delete p[ks[0]];try{localStorage.setItem(POS,JSON.stringify(p))}catch(e){}}
 
 // Birden fazla PDF: her biri ayrı sekmede açılır, ilk dosya görünür kalır, diğerleri arka planda yüklenir
+const isPdf=f=>/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name);
+const isImg=f=>/^image\/(jpeg|png|webp|bmp|gif|avif)$/i.test(f.type)||/\.(jpe?g|jfif|png|webp|bmp|gif|avif)$/i.test(f.name);
+const baseName=n=>n.replace(/\.(pdf|jpe?g|jfif|png|webp|bmp|gif|avif)$/i,'');
+async function imageToPdf(file){
+  let bmp;
+  try{bmp=await createImageBitmap(file,{imageOrientation:'from-image'})}
+  catch(e){bmp=await new Promise((ok,no)=>{const u=URL.createObjectURL(file),im=new Image();im.onload=()=>{URL.revokeObjectURL(u);ok(im)};im.onerror=()=>{URL.revokeObjectURL(u);no(new Error('Resim çözülemedi (biçim desteklenmiyor olabilir)'))};im.src=u})}
+  let w=bmp.width||bmp.naturalWidth,h=bmp.height||bmp.naturalHeight;
+  if(!w||!h)throw new Error('Resim boyutu okunamadı');
+  const k=Math.min(1,4500/Math.max(w,h));w=Math.round(w*k);h=Math.round(h*k);
+  const c=document.createElement('canvas');c.width=w;c.height=h;
+  const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,w,h);x.drawImage(bmp,0,0,w,h);
+  if(bmp.close)bmp.close();
+  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',0.95));
+  if(!blob)throw new Error('Resim dönüştürülemedi');
+  const jpg=new Uint8Array(await blob.arrayBuffer());
+  const pk=Math.min(1,1600/Math.max(w,h)),pw=(w*pk).toFixed(2),ph=(h*pk).toFixed(2);
+  const enc=new TextEncoder(),parts=[],offs=[];let len=0;
+  const add=b=>{if(typeof b==='string')b=enc.encode(b);parts.push(b);len+=b.length};
+  const obj=(n,body)=>{offs[n]=len;add(n+' 0 obj\n'+body+'\nendobj\n')};
+  add('%PDF-1.4\n');
+  obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2,'<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  obj(3,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+pw+' '+ph+'] /Contents 4 0 R /Resources << /XObject << /Im0 5 0 R >> >> >>');
+  const cs='q '+pw+' 0 0 '+ph+' 0 0 cm /Im0 Do Q';
+  obj(4,'<< /Length '+cs.length+' >>\nstream\n'+cs+'\nendstream');
+  offs[5]=len;
+  add('5 0 obj\n<< /Type /XObject /Subtype /Image /Width '+w+' /Height '+h+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+jpg.length+' >>\nstream\n');
+  add(jpg);add('\nendstream\nendobj\n');
+  const xr=len;let xt='xref\n0 6\n0000000000 65535 f \n';
+  for(let i=1;i<=5;i++)xt+=String(offs[i]).padStart(10,'0')+' 00000 n \n';
+  add(xt+'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+xr+'\n%%EOF');
+  return new Uint8Array(await new Blob(parts).arrayBuffer());
+}
 async function openFiles(files){
   files=[...files];
-  const pdfs=files.filter(f=>/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name));
-  if(pdfs.length<files.length)toast((files.length-pdfs.length)+' PDF olmayan dosya atlandı');
-  if(!pdfs.length)return;
+  const ok=files.filter(f=>isPdf(f)||isImg(f));
+  if(ok.length<files.length)toast((files.length-ok.length)+' desteklenmeyen dosya atlandı (PDF, JPG, PNG, WebP, BMP, GIF)');
+  if(!ok.length)return;
   let first=true,n=0;
-  for(const f of pdfs){
-    if(pdfs.length>1)toast('Açılıyor ('+(++n)+'/'+pdfs.length+'): '+f.name,1500);
+  for(const f of ok){
+    if(ok.length>1)toast('Açılıyor ('+(++n)+'/'+ok.length+'): '+f.name,1500);
     await openFile(f,first);first=false;
   }
-  if(pdfs.length>1)toast(pdfs.length+' PDF ayrı sekmelerde açıldı');
+  if(ok.length>1)toast(ok.length+' dosya ayrı sekmelerde açıldı');
 }
 async function openFile(file,go=true){
   const dk=file.name+'|'+file.size+'|'+(file.lastModified||0);
   const dup=tabs.find(t=>t.dk===dk);
-  if(dup){if(go)activate(dup);toast('Bu PDF zaten açık: '+file.name);return dup}
+  if(dup){if(go)activate(dup);toast('Bu dosya zaten açık: '+file.name);return dup}
   try{
     await ensurePdf();
     if(go)toast('Açılıyor: '+file.name,1500);
-    const data=new Uint8Array(await file.arrayBuffer());
+    let data,pdfBlob=null;
+    if(isImg(file)){data=await imageToPdf(file);pdfBlob=new Blob([data],{type:'application/pdf'})}
+    else data=new Uint8Array(await file.arrayBuffer());
     const task=pdfjsLib.getDocument({data});
     task.onPassword=(cb,reason)=>{const p=prompt(reason===2?'Şifre yanlış, tekrar deneyin:':'Bu PDF şifreli. Şifre:');if(p)cb(p);else task.destroy()};
     const doc=await task.promise;
     const pages=await Promise.all(Array.from({length:doc.numPages},(_,i)=>doc.getPage(i+1)));
-    const tab={id:++uid,name:file.name,key:file.name+'|'+file.size,dk,file,doc,pages,scale:1,rot:0,cur:1,tcache:[],query:'',saveTop:0,fit:true,pendingPage:0};
+    const tab={id:++uid,name:file.name,key:file.name+'|'+file.size,dk,file,pdfBlob,isImg:!!pdfBlob,doc,pages,scale:1,rot:0,cur:1,tcache:[],query:'',saveTop:0,fit:true,pendingPage:0};
     buildTab(tab);tabs.push(tab);
     const saved=readPos()[tab.key];
     fitWidth(tab,true);
@@ -392,6 +428,7 @@ async function openFile(file,go=true){
     $('#empty').style.display='none';
     renderTabBar();
     if(go||!active)activate(tab);
+    if(tab.isImg&&go){setMode('ocr');toast('Resim açıldı: metin/tablo için bir alan seçin ya da 📄 Sayfa düğmesine basın',4000)}
     return tab;
   }catch(e){if(e&&e.name==='PasswordException')return;toast('Açılamadı: '+(e.message||e),4000)}
 }
@@ -1012,7 +1049,7 @@ function renderHist(){
 async function doOcr(tab,i,rect,force,skipEmb){
   if(busy){toast('Devam eden bir işlem var…');return}
   busy=true;openResults();lastCrop={tab,i,rect};const asTable=!!S.tableMode;
-  const where=tab.name.replace(/\.pdf$/i,'').slice(0,24)+' s.'+(i+1);
+  const where=baseName(tab.name).slice(0,24)+' s.'+(i+1);
   try{
     if(S.preferEmbedded&&!force&&!skipEmb){
       setOcrStatus('PDF içindeki metin okunuyor…',true);
@@ -1322,15 +1359,15 @@ $('#pCancel').onclick=()=>$('#printModal').classList.remove('show');
 $('#printModal').addEventListener('click',e=>{if(e.target.id==='printModal')$('#printModal').classList.remove('show')});
 
 async function savePdf(){
-  if(!needPdf())return;const t=active,f=t.file;
+  if(!needPdf())return;const t=active,f=t.pdfBlob||t.file,nm=t.pdfBlob?baseName(t.name)+'.pdf':t.name;
   if(!f)return toast('Dosya bulunamadı');
   if(window.showSaveFilePicker){
     try{
-      const h=await showSaveFilePicker({suggestedName:t.name,types:[{description:'PDF',accept:{'application/pdf':['.pdf']}}]});
+      const h=await showSaveFilePicker({suggestedName:nm,types:[{description:'PDF',accept:{'application/pdf':['.pdf']}}]});
       const w=await h.createWritable();await w.write(f);await w.close();toast('Kaydedildi: '+h.name);return;
     }catch(e){if(e&&e.name==='AbortError')return}
   }
-  downloadBlob(f,t.name);toast('İndirildi: '+t.name);
+  downloadBlob(f,nm);toast('İndirildi: '+nm);
 }
 async function savePng(){
   if(!needPdf())return;const t=active,i=t.cur-1;
@@ -1338,7 +1375,7 @@ async function savePng(){
   try{
     const c=await renderCrop(t,i,null);
     const blob=await new Promise(r=>c.toBlob(r,'image/png'));
-    downloadBlob(blob,t.name.replace(/\.pdf$/i,'')+'-s'+(i+1)+'.png');
+    downloadBlob(blob,baseName(t.name)+'-s'+(i+1)+'.png');
     toast('Sayfa '+(i+1)+' PNG olarak indirildi');
   }catch(e){toast('Resim oluşturulamadı: '+(e.message||e),4000)}
 }
@@ -1365,10 +1402,10 @@ async function openFolder(){
   try{
     const dir=await showDirectoryPicker();
     const files=[];
-    for await(const [name,h] of dir.entries()){if(h.kind==='file'&&/\.pdf$/i.test(name))files.push(await h.getFile())}
+    for await(const [name,h] of dir.entries()){if(h.kind==='file'&&/\.(pdf|jpe?g|jfif|png|webp|bmp|gif|avif)$/i.test(name))files.push(await h.getFile())}
     files.sort((a,b)=>a.name.localeCompare(b.name,'tr',{numeric:true}));
-    if(!files.length)return toast('Klasörde PDF bulunamadı');
-    if(files.length>15&&!confirm(files.length+' PDF bulundu. Hepsi ayrı sekmede açılsın mı?'))return;
+    if(!files.length)return toast('Klasörde PDF veya resim bulunamadı');
+    if(files.length>15&&!confirm(files.length+' dosya bulundu. Hepsi ayrı sekmede açılsın mı?'))return;
     openFiles(files);
   }catch(e){
     if(e&&e.name==='AbortError')return;
@@ -1413,6 +1450,16 @@ addEventListener('beforeunload',()=>tabs.forEach(savePos));
 if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){
   navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
+// Panodaki resmi (ekran görüntüsü vb.) Ctrl+V ile yeni sekmede aç
+addEventListener('paste',e=>{
+  const t=e.target;if(t&&(/INPUT|TEXTAREA|SELECT/.test(t.tagName||'')||t.isContentEditable))return;
+  const items=[...((e.clipboardData&&e.clipboardData.items)||[])].filter(i=>i.kind==='file'&&/^image\//.test(i.type));
+  if(!items.length)return;
+  e.preventDefault();
+  const d=new Date(),z=n=>String(n).padStart(2,'0'),stamp=d.getFullYear()+z(d.getMonth()+1)+z(d.getDate())+'-'+z(d.getHours())+z(d.getMinutes())+z(d.getSeconds());
+  const fs=items.map((i,k)=>{const f=i.getAsFile(),ext=(f.type.split('/')[1]||'png').replace('jpeg','jpg');return new File([f],'pano-'+stamp+(k?'-'+(k+1):'')+'.'+ext,{type:f.type,lastModified:Date.now()+k})});
+  openFiles(fs);
+});
 // Windows/Chromium: PDF'e sağ tık > Birlikte aç ile gelen dosyalar
 if('launchQueue' in window){
   launchQueue.setConsumer(async p=>{
@@ -1429,7 +1476,7 @@ if('launchQueue' in window){
     for(const r of reqs){
       const res=await c.match(r);if(!res)continue;
       const name=decodeURIComponent(res.headers.get('X-Name')||'paylasilan.pdf');
-      files.push(new File([await res.blob()],name,{type:'application/pdf'}));
+      files.push(new File([await res.blob()],name,{type:res.headers.get('Content-Type')||'application/pdf'}));
       await c.delete(r);
     }
     window.history.replaceState(null,'',location.pathname);

@@ -48,7 +48,7 @@ async function handleShare(req) {
     for (const f of files) {
       await c.put(
         new URL('shared/' + (i++), self.registration.scope).href,
-        new Response(f, { headers: { 'Content-Type': 'application/pdf', 'X-Name': encodeURIComponent(f.name || 'paylasilan.pdf') } })
+        new Response(f, { headers: { 'Content-Type': f.type || 'application/pdf', 'X-Name': encodeURIComponent(f.name || 'paylasilan.pdf') } })
       );
     }
     return Response.redirect(home + '?shared=' + files.length, 303);
